@@ -3,29 +3,32 @@
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletButton } from '../solana/solana-provider'
 import { ExplorerLink } from '../cluster/cluster-ui'
-import { useCounterProgram } from './counter-data-access'
-import { CounterCreate, CounterList } from './counter-ui'
+// 1. Update the import to use the new hook name
+import { useVotingProgram } from './voting-data-access'
+import { VotingCreate, VotingList } from './voting-ui'
 import { AppHero } from '../app-hero'
 import { ellipsify } from '@/lib/utils'
 
-export default function CounterFeature() {
+export default function VotingFeature() {
   const { publicKey } = useWallet()
-  const { programId } = useCounterProgram()
+  
+  // 2. Call useVotingProgram instead of useVotingProgram
+  const { programId } = useVotingProgram()
 
   return publicKey ? (
     <div>
       <AppHero
-        title="Counter"
+        title="Voting Dapp"
         subtitle={
-          'Create a new account by clicking the "Create" button. The state of a account is stored on-chain and can be manipulated by calling the program\'s methods (increment, decrement, set, and close).'
+          'Create a new Poll by clicking the "Create" button. The state of the poll and candidates are stored on-chain on the Solana blockchain.'
         }
       >
         <p className="mb-6">
           <ExplorerLink path={`account/${programId}`} label={ellipsify(programId.toString())} />
         </p>
-        <CounterCreate />
+        <VotingCreate />
       </AppHero>
-      <CounterList />
+      <VotingList />
     </div>
   ) : (
     <div className="max-w-4xl mx-auto">

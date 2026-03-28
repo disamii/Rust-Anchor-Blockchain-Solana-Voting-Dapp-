@@ -1,5 +1,5 @@
-import CounterFeature from '@/components/counter/counter-feature'
+import VotingFeature from '@/components/voting/voting-feature'
 
 export default function Page() {
-  return <CounterFeature />
+  return <VotingFeature />
 }
