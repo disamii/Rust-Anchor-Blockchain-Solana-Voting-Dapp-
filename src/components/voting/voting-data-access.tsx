@@ -66,19 +66,34 @@ export function useVotingProgramAccount({ account }: { account: PublicKey }) {
   const { cluster } = useCluster()
   const transactionToast = useTransactionToast()
   
-  // 1. Destructure programId here so it's available below
-  const { program, accounts, programId } = useVotingProgram()
+  // 1. Add useConnection() here
+  const { connection } = useConnection() 
+  const { program, programId } = useVotingProgram()
 
   const accountQuery = useQuery({
     queryKey: ['voting', 'fetch', { cluster, account }],
     queryFn: () => program.account.poll.fetch(account),
   })
 
-const voteMutation = useMutation({
+  const voteMutation = useMutation({
     mutationKey: ['voting', 'vote', { cluster, account }],
     mutationFn: async ({ candidateName, pollId }: { candidateName: string; pollId: number }) => {
-      // We don't need to manually derive the PDA here 
-      // because Anchor will use the arguments below to find them!
+      
+      const [candidateAddress] = PublicKey.findProgramAddressSync(
+        [new anchor.BN(pollId).toArrayLike(Buffer, 'le', 8), Buffer.from(candidateName)],
+        programId
+      );
+
+      // Now 'connection' is defined and can be used to check the account
+      const candidateAccount = await connection.getAccountInfo(candidateAddress);
+
+      if (!candidateAccount) {
+        toast.info("Initializing new candidate...");
+        await program.methods
+          .initializeCandidate(candidateName, new anchor.BN(pollId))
+          .rpc();
+      }
+
       return program.methods
         .vote(candidateName, new anchor.BN(pollId))
         .rpc()
@@ -88,6 +103,7 @@ const voteMutation = useMutation({
       accountQuery.refetch()
     },
   })
+
   return {
     accountQuery,
     voteMutation,
