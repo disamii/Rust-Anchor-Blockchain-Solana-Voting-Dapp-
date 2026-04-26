@@ -20,7 +20,8 @@ export function AppModal({
       <DialogTrigger asChild>
         <Button variant="outline">{title}</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[525px]">
+      <DialogContent className="sm:max-w-[525px] bg-black/50 text-card-foreground border shadow-lg">
+        {' '}
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
