@@ -18,9 +18,9 @@ export function VotingCreate() {
       className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 rounded-xl shadow-lg transition-all"
       onClick={() => initializePoll.mutateAsync({
         pollId: Math.floor(Math.random() * 1000), 
-        description: "Annual Board Member Election 2026", // Real-world example
+        description: "Annual Board Member Election 2026",
         start: Math.floor(Date.now() / 1000),
-        end: Math.floor(Date.now() / 1000) + (86400 * 7), // Set for 1 week
+        end: Math.floor(Date.now() / 1000) + (86400 * 7), 
       })} 
       disabled={initializePoll.isPending}
     >

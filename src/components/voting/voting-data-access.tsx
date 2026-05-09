@@ -1,12 +1,14 @@
 'use client'
 
 // 1. Update these to the new names we created in the exports file
-import { getVotingProgram, getVotingProgramId } from '@project/anchor'
 import { useConnection } from '@solana/wallet-adapter-react'
 import { Cluster, Keypair, PublicKey } from '@solana/web3.js'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { useCluster } from '../cluster/cluster-data-access'
+
+
+import { getVotingProgram, getVotingProgramId } from '@project/anchor'
 import { useAnchorProvider } from '../solana/solana-provider'
 import { useTransactionToast } from '../use-transaction-toast'
 import { toast } from 'sonner'
@@ -22,7 +24,6 @@ export function useVotingProgram() {
   const programId = useMemo(() => getVotingProgramId(cluster.network as Cluster), [cluster])
   const program = useMemo(() => getVotingProgram(provider, programId), [provider, programId])
 
-  // Change 'counter' to 'poll' or 'candidate' based on your IDL
   const accounts = useQuery({
     queryKey: ['voting', 'all', { cluster }],
     queryFn: () => program.account.poll.all(), 
