@@ -129,6 +129,6 @@ App runs at **[http://localhost:3000](http://localhost:3000)** 🎉
 
 ## 👨‍💻 Author
 
-**Vipun Sanjana Software Engineer | AI & ML | Fullstack DevOps**
+**Samson Mamuye Web3 Dev**
 
 ---
