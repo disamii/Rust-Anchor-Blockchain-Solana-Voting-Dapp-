@@ -43,28 +43,62 @@ export function AccountChecker() {
 
 export function AccountBalanceCheck({ address }: { address: PublicKey }) {
   const { cluster } = useCluster()
-  const mutation = useRequestAirdrop({ address })
-  const query = useGetBalance({ address })
 
-  if (query.isLoading) {
+  const airdropMutation = useRequestAirdrop({ address })
+  const balanceQuery = useGetBalance({ address })
+
+  if (balanceQuery.isLoading) {
     return null
   }
-  if (query.isError || !query.data) {
+  if (airdropMutation.isError) {
+  return (
+    <AppAlert
+      action={
+        <Button
+          variant="outline"
+          onClick={() => airdropMutation.reset()}
+        >
+          Retry
+        </Button>
+      }
+    >
+      Airdrop limit reached.
+    </AppAlert>
+  )
+}
+
+  // RPC / network / query error
+  if (balanceQuery.isError) {
     return (
-      <AppAlert
-        action={
-          <Button variant="outline" onClick={() => mutation.mutateAsync(1).catch((err) => console.log(err))}>
-            Request Airdrop
-          </Button>
-        }
-      >
-        You are connected to <strong>{cluster.name}</strong> but your account is not found on this cluster.
+      <AppAlert action={null}>
+        Failed to fetch account balance on <strong>{cluster.name}</strong>.
       </AppAlert>
     )
   }
+
+  // Account not funded / no balance
+  if (!balanceQuery.data || balanceQuery.data === 0) {
+    return (
+      <AppAlert
+        action={
+      <Button
+  variant="outline"
+  disabled={airdropMutation.isPending}
+  onClick={() => airdropMutation.mutate(1)}
+>
+  {airdropMutation.isPending
+    ? "Requesting..."
+    : "Request Airdrop"}
+</Button>
+        }
+      >
+        Your wallet has no SOL on <strong>{cluster.name}</strong>.
+      </AppAlert>
+    )
+  }
+
   return null
 }
-
 export function AccountButtons({ address }: { address: PublicKey }) {
   const { cluster } = useCluster()
   return (

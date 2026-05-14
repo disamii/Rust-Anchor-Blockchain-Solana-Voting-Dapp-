@@ -85,6 +85,7 @@ pub mod voting {
     // =============================================
     // INSTRUCTION 1: Approved creator creates a poll
     // =============================================
+
     pub fn initialize_poll(
         ctx: Context<InitializePoll>,
         poll_id: u64,
@@ -281,7 +282,6 @@ pub struct RemoveApprovedCreator<'info> {
 }
 
 // --- Poll creation (now requires ApprovedCreator) ---
-
 #[derive(Accounts)]
 #[instruction(poll_id: u64)]
 pub struct InitializePoll<'info> {
