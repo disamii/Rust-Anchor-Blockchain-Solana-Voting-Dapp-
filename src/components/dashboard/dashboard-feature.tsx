@@ -1,16 +1,16 @@
+'use client'
+
 import { AppHero } from '@/components/app-hero'
 import { CheckBadgeIcon, ShieldCheckIcon, DocumentMagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { useRouter } from 'next/navigation'
 
 export function DashboardFeature() {
+  const router = useRouter()
   return (
     <div className="min-h-screen bg-white dark:bg-[#121212] text-slate-900 dark:text-slate-100">
-      <AppHero 
-        title="Vote Chain" 
-        subtitle="Immutable. Private. Mathematically Provable." 
-      />
+      <AppHero title="Vote Chain" subtitle="Immutable. Private. Mathematically Provable." />
 
       <div className="max-w-5xl mx-auto px-4 py-12">
-        
         {/* 2. The "Web3 Benefit" Grid: Explaining why they are here */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
           <div className="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-white/5">
@@ -36,23 +36,20 @@ export function DashboardFeature() {
           </div>
         </div>
 
-        {/* 3. The "Action" Center */}
         <div className="bg-slate-900 dark:bg-slate-800 rounded-2xl p-8 text-white shadow-xl flex flex-col md:flex-row items-center justify-between">
           <div className="mb-6 md:mb-0">
             <h2 className="text-2xl font-bold italic">Ready to make an impact?</h2>
             <p className="text-slate-300">View the active proposals for your organization.</p>
           </div>
-          <div className="flex gap-4">
-            <button className="bg-white text-slate-900 px-6 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors">
-              Browse Proposals
-            </button>
-            <button className="border border-white/30 px-6 py-3 rounded-lg font-bold hover:bg-white/10 transition-colors">
-              View Analytics
-            </button>
-          </div>
+
+          <button
+            onClick={() => router.push('/account')}
+            className="bg-white text-slate-900 px-6 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors"
+          >
+            Start Now
+          </button>
         </div>
 
-        {/* 4. Trust Proof Footer */}
         <div className="mt-16 pt-8 border-t border-slate-200 dark:border-slate-800 text-center">
           <p className="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-4">
             Powered by Secure Decentralized Infrastructure
