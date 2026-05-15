@@ -20,8 +20,9 @@ import {
   Timer,
   XCircle,
 } from 'lucide-react'
-import { Role, Poll, ApprovedCreator } from '../interface'
-import { useWalletRole } from './account-data-access'
+import {  Poll, ApprovedCreator } from '../interface'
+import { useGetApprovedCreators, useGetPolls, useWalletRole } from './account-data-access'
+import { formatCountdown } from '@/lib/utils'
 
 // ─────────────────────────────────────────────
 // CONCEPT: Role Detection
@@ -38,78 +39,52 @@ import { useWalletRole } from './account-data-access'
 // ─────────────────────────────────────────────
 
 
-const HARDCODED_ROLES: Record<string, Role> = {
-  '9xK2mQ7RExampleSuperAdminWalletAddressHere111': 'superadmin',
-  '3pL8nW4TExampleAdminWalletAddressHere22222222': 'admin',
-}
 
-function deriveRole(address: PublicKey): Role {
-  return HARDCODED_ROLES[address.toString()] ?? 'admin'
-}
+// const MOCK_POLLS: Poll[] = [
+//   {
+//     id: 1,
+//     title: 'Protocol Upgrade v2.1',
+//     description: 'Should we upgrade the protocol to support batch transactions?',
+//     start: Date.now() - 86_400_000,
+//     end: Date.now() + 172_800_000,
+//     candidates: [
+//       { name: 'Yes', votes: 142 },
+//       { name: 'No', votes: 73 },
+//       { name: 'Abstain', votes: 21 },
+//     ],
+//     status: 'active',
+//   },
+//   {
+//     id: 2,
+//     title: 'Treasury Allocation Q3',
+//     description: 'Allocate 10% of treasury to developer grants this quarter.',
+//     start: Date.now() + 86_400_000,
+//     end: Date.now() + 604_800_000,
+//     candidates: [
+//       { name: 'Approve', votes: 0 },
+//       { name: 'Reject', votes: 0 },
+//     ],
+//     status: 'upcoming',
+//   },
+//   {
+//     id: 3,
+//     title: 'Fee Structure Change',
+//     description: 'Reduce base fees from 0.5% to 0.3% across all transactions.',
+//     start: Date.now() - 604_800_000,
+//     end: Date.now() - 86_400_000,
+//     candidates: [
+//       { name: 'Yes', votes: 312 },
+//       { name: 'No', votes: 88 },
+//     ],
+//     status: 'ended',
+//   },
+// ]
 
-// ─────────────────────────────────────────────
-// MOCK DATA — replace with real Anchor fetches
-// ─────────────────────────────────────────────
+// const MOCK_CREATORS: ApprovedCreator[] = [
+//   { wallet: '3pL8...nW4T', addedAt: '2025-03-10', polls: 2 },
+//   { wallet: 'Hv7J...kP2M', addedAt: '2025-04-01', polls: 1 },
+// ]
 
-
-const MOCK_POLLS: Poll[] = [
-  {
-    id: 1,
-    title: 'Protocol Upgrade v2.1',
-    description: 'Should we upgrade the protocol to support batch transactions?',
-    start: Date.now() - 86_400_000,
-    end: Date.now() + 172_800_000,
-    candidates: [
-      { name: 'Yes', votes: 142 },
-      { name: 'No', votes: 73 },
-      { name: 'Abstain', votes: 21 },
-    ],
-    status: 'active',
-  },
-  {
-    id: 2,
-    title: 'Treasury Allocation Q3',
-    description: 'Allocate 10% of treasury to developer grants this quarter.',
-    start: Date.now() + 86_400_000,
-    end: Date.now() + 604_800_000,
-    candidates: [
-      { name: 'Approve', votes: 0 },
-      { name: 'Reject', votes: 0 },
-    ],
-    status: 'upcoming',
-  },
-  {
-    id: 3,
-    title: 'Fee Structure Change',
-    description: 'Reduce base fees from 0.5% to 0.3% across all transactions.',
-    start: Date.now() - 604_800_000,
-    end: Date.now() - 86_400_000,
-    candidates: [
-      { name: 'Yes', votes: 312 },
-      { name: 'No', votes: 88 },
-    ],
-    status: 'ended',
-  },
-]
-
-const MOCK_CREATORS: ApprovedCreator[] = [
-  { wallet: '3pL8...nW4T', addedAt: '2025-03-10', polls: 2 },
-  { wallet: 'Hv7J...kP2M', addedAt: '2025-04-01', polls: 1 },
-]
-
-// ─────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────
-
-function formatCountdown(endMs: number): string {
-  const diff = endMs - Date.now()
-  if (diff <= 0) return 'Ended'
-  const days = Math.floor(diff / 86_400_000)
-  const hours = Math.floor((diff % 86_400_000) / 3_600_000)
-  const mins = Math.floor((diff % 3_600_000) / 60_000)
-  if (days > 0) return `${days}d ${hours}h remaining`
-  return `${hours}h ${mins}m remaining`
-}
 
 function pollProgress(poll: Poll): number {
   const total = poll.end - poll.start
@@ -254,6 +229,17 @@ function PollCard({ poll, canVote }: { poll: Poll; canVote: boolean }) {
 // TAB: Admins (super-admin only)
 // ─────────────────────────────────────────────
 function AdminsTab() {
+  // Destructure data (aliased to creators) and isLoading from the hook
+  const { data: creators = [], isLoading } = useGetApprovedCreators()
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -270,34 +256,54 @@ function AdminsTab() {
       </div>
 
       <div className="space-y-4">
-        {MOCK_CREATORS.map((c) => (
-          <div
-            key={c.wallet}
-            className="flex items-center gap-4 px-6 py-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl"
-          >
-            <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center flex-shrink-0">
-              <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <p className="text-base font-mono font-medium truncate">{c.wallet}</p>
-              <p className="text-sm text-slate-500 mt-1">
-                Approved {c.addedAt} · {c.polls} poll{c.polls !== 1 ? 's' : ''}
-              </p>
-            </div>
-
-            <button className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">
-              <UserX className="h-4 w-4" />
-              Revoke
-            </button>
+        {creators.length === 0 ? (
+          <div className="text-center text-slate-500 py-12">
+            No approved creators found on-chain.
           </div>
-        ))}
+        ) : (
+          creators.map((c) => (
+            <div
+              key={c.wallet}
+              className="flex items-center gap-4 px-6 py-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl"
+            >
+              <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center flex-shrink-0">
+                <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                {/* Truncated for visual layout, or you can display the full key since it is font-mono */}
+                <p className="text-base font-mono font-medium truncate" title={c.wallet}>
+                  {c.wallet.slice(0, 4)}...{c.wallet.slice(-4)}
+                </p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Approved on {c.addedAt} by administrative action
+                </p>
+              </div>
+
+              <button className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">
+                <UserX className="h-4 w-4" />
+                Revoke
+              </button>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
 }
 
 function PollsTab({ canVote, canCreate }: { canVote: boolean; canCreate: boolean }) {
+  // Destructure data (aliased to polls) and isLoading from TanStack Query
+  const { data: polls = [], isLoading } = useGetPolls()
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {canCreate && (
@@ -316,9 +322,15 @@ function PollsTab({ canVote, canCreate }: { canVote: boolean; canCreate: boolean
       )}
 
       <div className="space-y-4">
-        {MOCK_POLLS.map((p) => (
-          <PollCard key={p.id} poll={p} canVote={canVote} />
-        ))}
+        {polls.length === 0 ? (
+          <div className="text-center text-slate-500 py-12">
+            No polls found on-chain.
+          </div>
+        ) : (
+          polls.map((p) => (
+            <PollCard key={p.id} poll={p} canVote={canVote} />
+          ))
+        )}
       </div>
     </div>
   )
@@ -351,20 +363,37 @@ function TransactionsTab({ address }: { address: PublicKey }) {
     </div>
   )
 }
-
 function VoteTab() {
-  const active = MOCK_POLLS.filter((p) => p.status === 'active')
-  const other = MOCK_POLLS.filter((p) => p.status !== 'active')
+  // Fetch live poll accounts from the hook
+  const { data: polls = [], isLoading } = useGetPolls()
+
+  // Separate live polls by their computed status
+  const active = polls.filter((p) => p.status === 'active')
+  const other = polls.filter((p) => p.status !== 'active')
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
       <div className="space-y-4">
+        {/* Active Polls Section */}
         {active.length === 0 ? (
-          <p className="text-base text-slate-400 py-8 text-center">No active polls right now.</p>
+          <p className="text-base text-slate-400 py-8 text-center">
+            No active polls right now.
+          </p>
         ) : (
-          active.map((p) => <PollCard key={p.id} poll={p} canVote={true} />)
+          active.map((p) => (
+            <PollCard key={p.id} poll={p} canVote={true} />
+          ))
         )}
 
+        {/* Upcoming or Ended Polls Section */}
         {other.map((p) => (
           <PollCard key={p.id} poll={p} canVote={false} />
         ))}

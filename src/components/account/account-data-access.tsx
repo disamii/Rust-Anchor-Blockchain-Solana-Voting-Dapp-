@@ -13,7 +13,7 @@ import {
 } from '@solana/web3.js'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Program } from '@coral-xyz/anchor'
-import { Role } from '../interface'
+import { ApprovedCreator, Poll, Role } from '../interface'
 import { useVotingProgram } from '../voting/voting-data-access'
 
 export function useGetBalance({ address }: { address: PublicKey }) {
@@ -33,8 +33,6 @@ export function useGetSignatures({ address }: { address: PublicKey }) {
     queryFn: () => connection.getSignaturesForAddress(address),
   })
 }
-
-
 
 export function useTransferSol({ address }: { address: PublicKey }) {
   const { connection } = useConnection()
@@ -164,15 +162,9 @@ async function createTransaction({
   }
 }
 
+export function useWalletRole({ address }: { address: PublicKey }) {
+  const { program, programId } = useVotingProgram()
 
-
-export function useWalletRole({
-  address,
-}: {
-  address: PublicKey 
-}) {
-    const { program, programId } = useVotingProgram()
-  
   const { connection } = useConnection()
 
   return useQuery({
@@ -181,10 +173,7 @@ export function useWalletRole({
     queryFn: async (): Promise<Role> => {
       if (!address) return 'voter'
 
-      const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from('config')],
-        program.programId,
-      )
+      const [configPda] = PublicKey.findProgramAddressSync([Buffer.from('config')], program.programId)
 
       try {
         const config = await program.account.config.fetch(configPda)
@@ -205,8 +194,7 @@ export function useWalletRole({
         program.programId,
       )
 
-      const approvedCreator =
-        await connection.getAccountInfo(approvedCreatorPda)
+      const approvedCreator = await connection.getAccountInfo(approvedCreatorPda)
 
       if (approvedCreator) {
         return 'admin'
@@ -217,23 +205,82 @@ export function useWalletRole({
   })
 }
 
-
-export function useGetTokenAccounts({ address }: { address: PublicKey }) {
-  const { connection } = useConnection()
+export function useGetPolls() {
+  const { program } = useVotingProgram()
 
   return useQuery({
-    queryKey: ['get-token-accounts', { endpoint: connection.rpcEndpoint, address }],
-    queryFn: async () => {
-      const [tokenAccounts, token2022Accounts] = await Promise.all([
-        connection.getParsedTokenAccountsByOwner(address, {
-          programId: TOKEN_PROGRAM_ID,
-        }),
-        connection.getParsedTokenAccountsByOwner(address, {
-          programId: TOKEN_2022_PROGRAM_ID,
-        }),
-      ])
-      return [...tokenAccounts.value, ...token2022Accounts.value]
+    queryKey: ['get-polls', { programId: program.programId.toString() }],
+    queryFn: async (): Promise<Poll[]> => {
+      const polls = await program.account.poll.all()
+
+      return polls.map((p) => {
+        const account = p.account
+        const now = Date.now()
+
+        const start = account.pollStart.toNumber() * 1000
+        const end = account.pollEnd.toNumber() * 1000
+
+        let status: 'upcoming' | 'active' | 'ended' = 'active'
+        if (now < start) {
+          status = 'upcoming'
+        } else if (now > end) {
+          status = 'ended'
+        }
+
+        return {
+          id: account.pollId.toNumber(),
+          title: `Poll #${account.pollId.toString()}`,
+          description: account.description,
+          start,
+          end,
+          candidateAmount: account.candidateAmount.toNumber(),
+          authority: account.authority.toString(),
+          status,
+          candidates: [],
+        }
+      })
     },
   })
 }
 
+
+export function useGetApprovedCreators() {
+  const { program } = useVotingProgram()
+
+  return useQuery({
+    queryKey: ['get-approved-creators', { programId: program.programId.toString() }],
+    queryFn: async (): Promise<ApprovedCreator[]> => {
+      const creators = await program.account.approvedCreator.all()
+
+      return creators.map((c) => {
+        const account = c.account
+
+        return {
+          // Correct field names from your IDL schema:
+          wallet: account.creator.toString(),
+          addedBy: account.addedBy.toString(),
+          addedAt: account.addedAt ? new Date(account.addedAt.toNumber() * 1000).toISOString().split('T')[0] : 'N/A',
+        }
+      })
+    },
+  })
+}
+
+// export function useGetTokenAccounts({ address }: { address: PublicKey }) {
+//   const { connection } = useConnection()
+
+//   return useQuery({
+//     queryKey: ['get-token-accounts', { endpoint: connection.rpcEndpoint, address }],
+//     queryFn: async () => {
+//       const [tokenAccounts, token2022Accounts] = await Promise.all([
+//         connection.getParsedTokenAccountsByOwner(address, {
+//           programId: TOKEN_PROGRAM_ID,
+//         }),
+//         connection.getParsedTokenAccountsByOwner(address, {
+//           programId: TOKEN_2022_PROGRAM_ID,
+//         }),
+//       ])
+//       return [...tokenAccounts.value, ...token2022Accounts.value]
+//     },
+//   })
+// }

@@ -1,17 +1,39 @@
 export  type Role = 'superadmin' | 'admin' | 'voter'
 
-export  interface Poll {
+
+export interface Candidate {
+  name: string
+  votes: number
+}
+
+export interface Poll {
   id: number
   title: string
   description: string
-  start: number // unix ms
-  end: number // unix ms
-  candidates: { name: string; votes: number }[]
-  status: 'active' | 'upcoming' | 'ended'
+  start: number
+  end: number
+  candidates: Candidate[]
+  status: 'upcoming' | 'active' | 'ended'
+}
+
+export interface Candidate {
+  name: string
+  votes: number
+}
+
+export interface Poll {
+  id: number
+  title: string
+  description: string
+  start: number
+  end: number
+  candidateAmount: number
+  authority: string
+  status: 'upcoming' | 'active' | 'ended'
 }
 
 export interface ApprovedCreator {
   wallet: string
+  addedBy: string
   addedAt: string
-  polls: number
 }
