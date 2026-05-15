@@ -10,6 +10,7 @@ import { ellipsify } from '@/lib/utils'
 import { CopyIcon } from 'lucide-react'
 
 import { IdCard as IdentificationIcon, History as HistoryIcon, ShieldCheck as ShieldCheckIcon } from 'lucide-react'
+import RoleDashboard from './account-tabs'
 export default function AccountDetailFeature() {
   const params = useParams()
 
@@ -64,28 +65,8 @@ export default function AccountDetailFeature() {
         </div>
       </AppHero>
 
-      <div className="max-w-4xl mx-auto space-y-12 px-4">
+       <RoleDashboard address={address} />
 
-        <section>
-          <div className="flex items-center gap-2 mb-4 border-b border-slate-200 dark:border-slate-800 pb-2">
-            <HistoryIcon className="h-5 w-5 text-blue-600" />
-            <h2 className="text-xl font-bold">Participation History</h2>
-          </div>
-          <div className="bg-white dark:bg-black/20 rounded-lg p-2 border border-slate-200 dark:border-slate-800">
-            <AccountTransactions address={address} />
-          </div>
-        </section>
-
-        {/* 4. Transparency Link */}
-        <div className="text-center pt-8">
-          <p className="text-xs text-slate-400 mb-2">View raw ledger data for this identity:</p>
-          <ExplorerLink
-            path={`account/${address}`}
-            label="View Immutable Ledger Record"
-            className="text-blue-500 underline text-sm"
-          />
-        </div>
-      </div>
     </div>
   )
 }
