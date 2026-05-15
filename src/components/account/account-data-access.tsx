@@ -12,6 +12,9 @@ import {
   VersionedTransaction,
 } from '@solana/web3.js'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Program } from '@coral-xyz/anchor'
+import { Role } from '../interface'
+import { useVotingProgram } from '../voting/voting-data-access'
 
 export function useGetBalance({ address }: { address: PublicKey }) {
   const { connection } = useConnection()
@@ -31,24 +34,7 @@ export function useGetSignatures({ address }: { address: PublicKey }) {
   })
 }
 
-export function useGetTokenAccounts({ address }: { address: PublicKey }) {
-  const { connection } = useConnection()
 
-  return useQuery({
-    queryKey: ['get-token-accounts', { endpoint: connection.rpcEndpoint, address }],
-    queryFn: async () => {
-      const [tokenAccounts, token2022Accounts] = await Promise.all([
-        connection.getParsedTokenAccountsByOwner(address, {
-          programId: TOKEN_PROGRAM_ID,
-        }),
-        connection.getParsedTokenAccountsByOwner(address, {
-          programId: TOKEN_2022_PROGRAM_ID,
-        }),
-      ])
-      return [...tokenAccounts.value, ...token2022Accounts.value]
-    },
-  })
-}
 
 export function useTransferSol({ address }: { address: PublicKey }) {
   const { connection } = useConnection()
@@ -177,3 +163,77 @@ async function createTransaction({
     latestBlockhash,
   }
 }
+
+
+
+export function useWalletRole({
+  address,
+}: {
+  address: PublicKey 
+}) {
+    const { program, programId } = useVotingProgram()
+  
+  const { connection } = useConnection()
+
+  return useQuery({
+    enabled: !!address,
+    queryKey: ['wallet-role', address?.toString()],
+    queryFn: async (): Promise<Role> => {
+      if (!address) return 'voter'
+
+      const [configPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from('config')],
+        program.programId,
+      )
+
+      try {
+        const config = await program.account.config.fetch(configPda)
+
+        if (config.admin.toString() === address.toString()) {
+          return 'superadmin'
+        }
+      } catch {
+        // config not initialized yet
+      }
+
+      // =====================================
+      // 2. Check if approved creator exists
+      // =====================================
+
+      const [approvedCreatorPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from('approved_creator'), address.toBuffer()],
+        program.programId,
+      )
+
+      const approvedCreator =
+        await connection.getAccountInfo(approvedCreatorPda)
+
+      if (approvedCreator) {
+        return 'admin'
+      }
+
+      return 'voter'
+    },
+  })
+}
+
+
+export function useGetTokenAccounts({ address }: { address: PublicKey }) {
+  const { connection } = useConnection()
+
+  return useQuery({
+    queryKey: ['get-token-accounts', { endpoint: connection.rpcEndpoint, address }],
+    queryFn: async () => {
+      const [tokenAccounts, token2022Accounts] = await Promise.all([
+        connection.getParsedTokenAccountsByOwner(address, {
+          programId: TOKEN_PROGRAM_ID,
+        }),
+        connection.getParsedTokenAccountsByOwner(address, {
+          programId: TOKEN_2022_PROGRAM_ID,
+        }),
+      ])
+      return [...tokenAccounts.value, ...token2022Accounts.value]
+    },
+  })
+}
+

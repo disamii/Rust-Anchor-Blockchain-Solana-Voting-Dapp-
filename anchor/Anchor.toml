@@ -17,3 +17,4 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "../node_modules/.bin/jest --preset ts-jest"
+init-admin = "yarn ts-node anchor/scripts/init-config.ts"  # Added anchor/ prefix

@@ -2,13 +2,9 @@
 
 import { PublicKey } from '@solana/web3.js'
 import { useMemo, useState } from 'react'
-import { useParams } from 'next/navigation'
 import { ExplorerLink } from '../cluster/cluster-ui'
-import { AccountBalance, AccountButtons, AccountTransactions } from './account-ui'
-import { AppHero } from '../app-hero'
-import { ellipsify } from '@/lib/utils'
+import {  AccountTransactions } from './account-ui'
 import {
-  CopyIcon,
   IdCard as IdentificationIcon,
   ShieldCheck,
   Users,
@@ -24,6 +20,8 @@ import {
   Timer,
   XCircle,
 } from 'lucide-react'
+import { Role, Poll, ApprovedCreator } from '../interface'
+import { useWalletRole } from './account-data-access'
 
 // ─────────────────────────────────────────────
 // CONCEPT: Role Detection
@@ -39,12 +37,10 @@ import {
 // For now we hardcode 3 wallets. Swap `deriveRole` with real RPC calls later.
 // ─────────────────────────────────────────────
 
-type Role = 'superadmin' | 'admin' | 'voter'
 
 const HARDCODED_ROLES: Record<string, Role> = {
   '9xK2mQ7RExampleSuperAdminWalletAddressHere111': 'superadmin',
   '3pL8nW4TExampleAdminWalletAddressHere22222222': 'admin',
-  // everyone else falls through to 'voter'
 }
 
 function deriveRole(address: PublicKey): Role {
@@ -55,21 +51,6 @@ function deriveRole(address: PublicKey): Role {
 // MOCK DATA — replace with real Anchor fetches
 // ─────────────────────────────────────────────
 
-interface Poll {
-  id: number
-  title: string
-  description: string
-  start: number // unix ms
-  end: number // unix ms
-  candidates: { name: string; votes: number }[]
-  status: 'active' | 'upcoming' | 'ended'
-}
-
-interface ApprovedCreator {
-  wallet: string
-  addedAt: string
-  polls: number
-}
 
 const MOCK_POLLS: Poll[] = [
   {
@@ -399,11 +380,11 @@ type TabDef = {
 }
 
 export default function RoleDashboard({ address }: { address: PublicKey }) {
-  const role = deriveRole(address)
+const { data: role = 'voter' } = useWalletRole({ address })
   const [activeTab, setActiveTab] = useState(0)
 
   const tabs: TabDef[] = useMemo(() => {
-    if (role === 'superadmin')
+    if (role  === 'superadmin')
       return [
         {
           label: 'Creators',
@@ -422,7 +403,7 @@ export default function RoleDashboard({ address }: { address: PublicKey }) {
         },
       ]
 
-    if (role === 'admin')
+    if (role  === 'admin')
       return [
         {
           label: 'My Polls',
@@ -468,7 +449,7 @@ export default function RoleDashboard({ address }: { address: PublicKey }) {
       className: 'text-blue-700 bg-blue-50 dark:bg-blue-950 dark:text-blue-300',
       icon: <Vote className="h-4 w-4" />,
     },
-  }[role]
+  }[role ]
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-6 pb-24">
@@ -481,28 +462,28 @@ export default function RoleDashboard({ address }: { address: PublicKey }) {
         </span>
 
         <span className="text-sm text-slate-400">
-          {role === 'superadmin' && 'Wallet stored in Config PDA · full control'}
+          {role  === 'superadmin' && 'Wallet stored in Config PDA · full control'}
 
-          {role === 'admin' && 'ApprovedCreator PDA exists for this wallet'}
+          {role  === 'admin' && 'ApprovedCreator PDA exists for this wallet'}
 
-          {role === 'voter' && 'Vote once per poll · enforced by VoteRecord PDA'}
+          {role  === 'voter' && 'Vote once per poll · enforced by VoteRecord PDA'}
         </span>
       </div>
 
-      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 mb-8">
+      <div className="flex w-full p-1 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 mb-8">
         {tabs.map((tab, i) => (
           <button
             key={tab.label}
             onClick={() => setActiveTab(i)}
-            className={`flex items-center gap-2 px-6 py-4 text-base font-medium border-b-2 transition-colors -mb-px
-              ${
-                activeTab === i
-                  ? 'border-violet-600 text-violet-700 dark:text-violet-300'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
+        ${
+          activeTab === i
+            ? 'bg-white dark:bg-slate-800 text-violet-700 dark:text-violet-300 shadow-sm'
+            : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-white/60 dark:hover:bg-slate-800/60'
+        }`}
           >
             {tab.icon}
-            {tab.label}
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>

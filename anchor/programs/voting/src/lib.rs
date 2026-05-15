@@ -3,7 +3,7 @@
 use anchor_lang::prelude::*;
 
 declare_id!("CJQhZqq1X6EC2wE2sUYZAczqQSBvYs9DZGkrs8AQiRxB");
-
+const SUPER_ADMIN: Pubkey = pubkey!("GpUMEq99J518SMjgRMmKX6kcRCiudg3FoKxpzx7pGD7J");
 #[program]
 pub mod voting {
     use super::*;
@@ -14,14 +14,16 @@ pub mod voting {
     // because Config PDA has fixed seeds — second call fails
     // =============================================
     pub fn initialize_config(ctx: Context<InitializeConfig>) -> Result<()> {
-        let config = &mut ctx.accounts.config;
+    require!(
+        ctx.accounts.signer.key() == SUPER_ADMIN,
+        VotingError::Unauthorized
+    );
 
-        // whoever deploys and calls this becomes the super-admin
-        config.admin = ctx.accounts.signer.key();
+    let config = &mut ctx.accounts.config;
+    config.admin = SUPER_ADMIN;
 
-        msg!("Config initialized. Super-admin: {}", config.admin);
-        Ok(())
-    }
+    Ok(())
+}
 
     // =============================================
     // INSTRUCTION 0b: Transfer super-admin to new wallet
