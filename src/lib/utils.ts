@@ -13,13 +13,18 @@ export function ellipsify(str = '', len = 4, delimiter = '..') {
 }
 
 
-
 export function formatCountdown(endMs: number): string {
   const diff = endMs - Date.now()
   if (diff <= 0) return 'Ended'
+
   const days = Math.floor(diff / 86_400_000)
   const hours = Math.floor((diff % 86_400_000) / 3_600_000)
   const mins = Math.floor((diff % 3_600_000) / 60_000)
-  if (days > 0) return `${days}d ${hours}h remaining`
-  return `${hours}h ${mins}m remaining`
+  const secs = Math.floor((diff % 60_000) / 1000) 
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${mins}m remaining`
+  }
+  
+  return `${hours}h ${mins}m ${secs}s remaining`
 }

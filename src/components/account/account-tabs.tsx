@@ -1,237 +1,44 @@
 'use client'
 
 import { PublicKey } from '@solana/web3.js'
-import { useMemo, useState } from 'react'
+import { useMemo, useState} from 'react'
 import { ExplorerLink } from '../cluster/cluster-ui'
-import {  AccountTransactions } from './account-ui'
+import { AccountTransactions } from './account-ui'
+import { useInitializePoll } from './account-data-access' 
+
 import {
-  IdCard as IdentificationIcon,
   ShieldCheck,
   Users,
   ClipboardList,
   History,
   Vote,
-  ChevronDown,
-  Clock,
-  PlusCircle,
   UserPlus,
   UserX,
   CheckCircle2,
   Timer,
+  X,
   XCircle,
+  BarChart2,
 } from 'lucide-react'
-import {  Poll, ApprovedCreator } from '../interface'
-import { useGetApprovedCreators, useGetPolls, useWalletRole } from './account-data-access'
-import { formatCountdown } from '@/lib/utils'
+import { Poll } from '../interface'
+import { useGetApprovedCreators,  useWalletRole } from './account-data-access'
+import { useAddApprovedCreator } from './account-data-access' 
+import { useWallet } from '@solana/wallet-adapter-react'
+import { PollsTab, VoteTab } from './poll'
 
-// ─────────────────────────────────────────────
-// CONCEPT: Role Detection
-//
-// In production you would:
-//   1. const { publicKey } = useWallet()
-//   2. Derive Config PDA: PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID)
-//   3. Fetch it → compare config.admin === publicKey → SUPER_ADMIN
-//   4. Derive ApprovedCreator PDA: findProgramAddressSync([Buffer.from("approved_creator"), publicKey.toBytes()], PROGRAM_ID)
-//   5. Try to fetch it → if it exists → ADMIN (poll creator)
-//   6. Otherwise → VOTER
-//
-// For now we hardcode 3 wallets. Swap `deriveRole` with real RPC calls later.
-// ─────────────────────────────────────────────
-
-
-
-// const MOCK_POLLS: Poll[] = [
-//   {
-//     id: 1,
-//     title: 'Protocol Upgrade v2.1',
-//     description: 'Should we upgrade the protocol to support batch transactions?',
-//     start: Date.now() - 86_400_000,
-//     end: Date.now() + 172_800_000,
-//     candidates: [
-//       { name: 'Yes', votes: 142 },
-//       { name: 'No', votes: 73 },
-//       { name: 'Abstain', votes: 21 },
-//     ],
-//     status: 'active',
-//   },
-//   {
-//     id: 2,
-//     title: 'Treasury Allocation Q3',
-//     description: 'Allocate 10% of treasury to developer grants this quarter.',
-//     start: Date.now() + 86_400_000,
-//     end: Date.now() + 604_800_000,
-//     candidates: [
-//       { name: 'Approve', votes: 0 },
-//       { name: 'Reject', votes: 0 },
-//     ],
-//     status: 'upcoming',
-//   },
-//   {
-//     id: 3,
-//     title: 'Fee Structure Change',
-//     description: 'Reduce base fees from 0.5% to 0.3% across all transactions.',
-//     start: Date.now() - 604_800_000,
-//     end: Date.now() - 86_400_000,
-//     candidates: [
-//       { name: 'Yes', votes: 312 },
-//       { name: 'No', votes: 88 },
-//     ],
-//     status: 'ended',
-//   },
-// ]
-
-// const MOCK_CREATORS: ApprovedCreator[] = [
-//   { wallet: '3pL8...nW4T', addedAt: '2025-03-10', polls: 2 },
-//   { wallet: 'Hv7J...kP2M', addedAt: '2025-04-01', polls: 1 },
-// ]
-
-
-function pollProgress(poll: Poll): number {
-  const total = poll.end - poll.start
-  const elapsed = Date.now() - poll.start
-  return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)))
+interface AddCreatorModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+type TabDef = {
+  label: string
+  icon: React.ReactNode
+  content: React.ReactNode
 }
 
-// ─────────────────────────────────────────────
-// STATUS BADGE
-// ─────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: Poll['status'] }) {
-  const map = {
-    active: {
-      icon: <CheckCircle2 className="h-3 w-3" />,
-      label: 'Live',
-      className: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300',
-    },
-    upcoming: {
-      icon: <Timer className="h-3 w-3" />,
-      label: 'Upcoming',
-      className: 'text-violet-700 bg-violet-50 dark:bg-violet-950 dark:text-violet-300',
-    },
-    ended: {
-      icon: <XCircle className="h-3 w-3" />,
-      label: 'Ended',
-      className: 'text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-400',
-    },
-  }
-  const { icon, label, className } = map[status]
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${className}`}>
-      {icon}
-      {label}
-    </span>
-  )
-}
-
-// ─────────────────────────────────────────────
-// POLL CARD — collapsible with countdown
-
-function PollCard({ poll, canVote }: { poll: Poll; canVote: boolean }) {
-  const [open, setOpen] = useState(false)
-  const totalVotes = poll.candidates.reduce((a, c) => a + c.votes, 0)
-
-  return (
-    <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 transition-all">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-4 px-6 py-5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
-        aria-expanded={open}
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-semibold text-base">{poll.title}</span>
-            <StatusBadge status={poll.status} />
-          </div>
-
-          <p className="text-sm text-slate-500 mt-1.5">
-            {poll.candidates.length} candidates · {totalVotes} votes
-          </p>
-        </div>
-
-        <ChevronDown
-          className={`h-5 w-5 text-slate-400 flex-shrink-0 transition-transform duration-200 ${
-            open ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="px-6 pb-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40">
-          <p className="text-base text-slate-600 dark:text-slate-400 mt-5 mb-5 leading-relaxed">{poll.description}</p>
-
-          <div className="grid grid-cols-2 gap-5 mb-5 text-sm">
-            <div>
-              <span className="text-slate-400 block mb-1">Poll ID (PDA seed)</span>
-
-              <span className="font-mono font-medium break-all">{poll.id}</span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 block mb-1">Ends</span>
-
-              <span className="font-medium">{new Date(poll.end).toLocaleDateString()}</span>
-            </div>
-          </div>
-
-          {poll.status === 'active' && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 text-sm font-medium text-violet-700 dark:text-violet-300 mb-2">
-                <Clock className="h-4 w-4" />
-                {formatCountdown(poll.end)}
-              </div>
-
-              <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-violet-500 rounded-full transition-all"
-                  style={{ width: `${pollProgress(poll)}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            {poll.candidates.map((c) => {
-              const pct = totalVotes ? Math.round((c.votes / totalVotes) * 100) : 0
-
-              return (
-                <div key={c.name} className="flex items-center gap-4">
-                  <span className="text-sm w-28 flex-shrink-0 font-medium">{c.name}</span>
-
-                  <div className="flex-1 h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-
-                  <span className="text-sm text-slate-500 w-12 text-right font-medium">{c.votes}</span>
-
-                  {canVote && poll.status === 'active' && (
-                    <button className="text-sm px-4 py-2 rounded-lg bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors flex-shrink-0">
-                      Vote
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="mt-5 pt-5 border-t border-slate-200 dark:border-slate-700">
-            <ExplorerLink
-              path={`account/${poll.id}`}
-              label="View Poll PDA on Explorer →"
-              className="text-sm text-slate-400 hover:text-blue-500 transition-colors"
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-// ─────────────────────────────────────────────
-// TAB: Admins (super-admin only)
-// ─────────────────────────────────────────────
 function AdminsTab() {
-  // Destructure data (aliased to creators) and isLoading from the hook
   const { data: creators = [], isLoading } = useGetApprovedCreators()
-
+  const [isModalOpen, setIsModalOpen] = useState(false)
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -248,8 +55,10 @@ function AdminsTab() {
           <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm">ApprovedCreator</code> PDA can
           create polls.
         </p>
-
-        <button className="flex items-center gap-2 text-base px-5 py-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 transition-colors">
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-2 text-base px-5 py-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+        >
           <UserPlus className="h-5 w-5" />
           Add creator
         </button>
@@ -257,9 +66,7 @@ function AdminsTab() {
 
       <div className="space-y-4">
         {creators.length === 0 ? (
-          <div className="text-center text-slate-500 py-12">
-            No approved creators found on-chain.
-          </div>
+          <div className="text-center text-slate-500 py-12">No approved creators found on-chain.</div>
         ) : (
           creators.map((c) => (
             <div
@@ -275,9 +82,7 @@ function AdminsTab() {
                 <p className="text-base font-mono font-medium truncate" title={c.wallet}>
                   {c.wallet.slice(0, 4)}...{c.wallet.slice(-4)}
                 </p>
-                <p className="text-sm text-slate-500 mt-1">
-                  Approved on {c.addedAt} by administrative action
-                </p>
+                <p className="text-sm text-slate-500 mt-1">Approved on {c.addedAt} by administrative action</p>
               </div>
 
               <button className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">
@@ -288,49 +93,118 @@ function AdminsTab() {
           ))
         )}
       </div>
+      <AddCreatorModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </div>
   )
 }
 
-function PollsTab({ canVote, canCreate }: { canVote: boolean; canCreate: boolean }) {
-  // Destructure data (aliased to polls) and isLoading from TanStack Query
-  const { data: polls = [], isLoading } = useGetPolls()
+function AddCreatorModal({ isOpen, onClose }: AddCreatorModalProps) {
+  const { publicKey } = useWallet()
+  const mutation = useAddApprovedCreator()
+  const [walletInput, setWalletInput] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
-      </div>
-    )
+  if (!isOpen) return null
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrorMsg('')
+
+    if (!publicKey) {
+      setErrorMsg('Please connect your wallet first.')
+      return
+    }
+
+    try {
+      // Validate that input string is a valid Solana public key
+      const creatorPublicKey = new PublicKey(walletInput.trim())
+
+      mutation.mutate(
+        {
+          creatorWallet: creatorPublicKey,
+          superAdmin: publicKey,
+        },
+        {
+          onSuccess: () => {
+            setWalletInput('')
+            onClose() // Close the modal on successful transaction
+          },
+          onError: (err: any) => {
+            setErrorMsg(err?.message || 'Transaction failed. Are you the Super Admin?')
+          },
+        },
+      )
+    } catch (err) {
+      setErrorMsg('Invalid Solana wallet address format.')
+    }
   }
 
   return (
-    <div className="space-y-6">
-      {canCreate && (
-        <div className="flex items-center justify-between">
-          <p className="text-base text-slate-500 leading-relaxed">
-            You have an{' '}
-            <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm">ApprovedCreator</code> PDA — you
-            can create polls.
-          </p>
-
-          <button className="flex items-center gap-2 text-base px-5 py-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 transition-colors">
-            <PlusCircle className="h-5 w-5" />
-            Create poll
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-violet-600" />
+            Approve New Creator
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
-      )}
 
-      <div className="space-y-4">
-        {polls.length === 0 ? (
-          <div className="text-center text-slate-500 py-12">
-            No polls found on-chain.
+        {/* Modal Body / Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Creator Wallet Address
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. GpUMEq99J518SMjgRMm..."
+              value={walletInput}
+              onChange={(e) => setWalletInput(e.target.value)}
+              disabled={mutation.isPending}
+              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none font-mono text-sm transition-all"
+            />
           </div>
-        ) : (
-          polls.map((p) => (
-            <PollCard key={p.id} poll={p} canVote={canVote} />
-          ))
-        )}
+
+          {errorMsg && (
+            <p className="text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-xl">
+              {errorMsg}
+            </p>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={mutation.isPending}
+              className="px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              className="px-5 py-2.5 text-sm font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:bg-violet-400 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+            >
+              {mutation.isPending ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Approving...
+                </>
+              ) : (
+                'Approve Wallet'
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
@@ -363,57 +237,14 @@ function TransactionsTab({ address }: { address: PublicKey }) {
     </div>
   )
 }
-function VoteTab() {
-  // Fetch live poll accounts from the hook
-  const { data: polls = [], isLoading } = useGetPolls()
 
-  // Separate live polls by their computed status
-  const active = polls.filter((p) => p.status === 'active')
-  const other = polls.filter((p) => p.status !== 'active')
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        {/* Active Polls Section */}
-        {active.length === 0 ? (
-          <p className="text-base text-slate-400 py-8 text-center">
-            No active polls right now.
-          </p>
-        ) : (
-          active.map((p) => (
-            <PollCard key={p.id} poll={p} canVote={true} />
-          ))
-        )}
-
-        {/* Upcoming or Ended Polls Section */}
-        {other.map((p) => (
-          <PollCard key={p.id} poll={p} canVote={false} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-type TabDef = {
-  label: string
-  icon: React.ReactNode
-  content: React.ReactNode
-}
 
 export default function RoleDashboard({ address }: { address: PublicKey }) {
-const { data: role = 'voter' } = useWalletRole({ address })
+  const { data: role = 'voter' } = useWalletRole({ address })
   const [activeTab, setActiveTab] = useState(0)
 
   const tabs: TabDef[] = useMemo(() => {
-    if (role  === 'superadmin')
+    if (role === 'superadmin')
       return [
         {
           label: 'Creators',
@@ -432,7 +263,7 @@ const { data: role = 'voter' } = useWalletRole({ address })
         },
       ]
 
-    if (role  === 'admin')
+    if (role === 'admin')
       return [
         {
           label: 'My Polls',
@@ -478,7 +309,7 @@ const { data: role = 'voter' } = useWalletRole({ address })
       className: 'text-blue-700 bg-blue-50 dark:bg-blue-950 dark:text-blue-300',
       icon: <Vote className="h-4 w-4" />,
     },
-  }[role ]
+  }[role]
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-6 pb-24">
@@ -491,11 +322,11 @@ const { data: role = 'voter' } = useWalletRole({ address })
         </span>
 
         <span className="text-sm text-slate-400">
-          {role  === 'superadmin' && 'Wallet stored in Config PDA · full control'}
+          {role === 'superadmin' && 'Wallet stored in Config PDA · full control'}
 
-          {role  === 'admin' && 'ApprovedCreator PDA exists for this wallet'}
+          {role === 'admin' && 'ApprovedCreator PDA exists for this wallet'}
 
-          {role  === 'voter' && 'Vote once per poll · enforced by VoteRecord PDA'}
+          {role === 'voter' && 'Vote once per poll · enforced by VoteRecord PDA'}
         </span>
       </div>
 
@@ -521,3 +352,5 @@ const { data: role = 'voter' } = useWalletRole({ address })
     </div>
   )
 }
+
+

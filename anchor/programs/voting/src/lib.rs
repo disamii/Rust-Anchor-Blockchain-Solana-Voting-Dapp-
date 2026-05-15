@@ -383,9 +383,9 @@ pub struct Config {
 #[account]
 #[derive(InitSpace)]
 pub struct ApprovedCreator {
-    pub creator:   Pubkey,  // whose wallet was approved
-    pub added_by:  Pubkey,  // which admin approved them (audit trail)
-    pub added_at:  i64,     // when they were approved (unix timestamp)
+    pub creator:   Pubkey,  
+    pub added_by:  Pubkey,  
+    pub added_at:  i64,     
 }
 
 #[account]
@@ -397,13 +397,13 @@ pub struct Poll {
     pub poll_start:       u64,
     pub poll_end:         u64,
     pub candidate_amount: u64,
-    pub authority:        Pubkey,   // which approved creator owns this poll
+    pub authority:        Pubkey,   
 }
 
 #[account]
 #[derive(InitSpace)]
 pub struct Candidate {
-    pub poll:             Pubkey,   // FK → which poll
+    pub poll:             Pubkey,   
     #[max_len(280)]
     pub candidate_name:   String,
     pub candidate_votes:  u64,
@@ -412,9 +412,8 @@ pub struct Candidate {
 #[account]
 #[derive(InitSpace)]
 pub struct VoteRecord {
-    pub voter: Pubkey,   // who voted (provable)
-    pub poll:  Pubkey,   // which poll
-    // no candidate field → anonymity
+    pub voter: Pubkey,  
+    pub poll:  Pubkey,  
 }
 
 // =============================================

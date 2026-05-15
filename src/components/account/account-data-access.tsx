@@ -1,6 +1,5 @@
 'use client'
 
-import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import {
   Connection,
@@ -12,9 +11,48 @@ import {
   VersionedTransaction,
 } from '@solana/web3.js'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Program } from '@coral-xyz/anchor'
-import { ApprovedCreator, Poll, Role } from '../interface'
+import { ApprovedCreator, Candidate, Poll, Role } from '../interface'
 import { useVotingProgram } from '../voting/voting-data-access'
+import { BN } from '@coral-xyz/anchor'
+
+async function createTransaction({
+  publicKey,
+  destination,
+  amount,
+  connection,
+}: {
+  publicKey: PublicKey
+  destination: PublicKey
+  amount: number
+  connection: Connection
+}): Promise<{
+  transaction: VersionedTransaction
+  latestBlockhash: { blockhash: string; lastValidBlockHeight: number }
+}> {
+  // Get the latest blockhash to use in our transaction
+  const latestBlockhash = await connection.getLatestBlockhash()
+
+  const instructions = [
+    SystemProgram.transfer({
+      fromPubkey: publicKey,
+      toPubkey: destination,
+      lamports: amount * LAMPORTS_PER_SOL,
+    }),
+  ]
+
+  const messageLegacy = new TransactionMessage({
+    payerKey: publicKey,
+    recentBlockhash: latestBlockhash.blockhash,
+    instructions,
+  }).compileToLegacyMessage()
+
+  const transaction = new VersionedTransaction(messageLegacy)
+
+  return {
+    transaction,
+    latestBlockhash,
+  }
+}
 
 export function useGetBalance({ address }: { address: PublicKey }) {
   const { connection } = useConnection()
@@ -120,46 +158,120 @@ export function useRequestAirdrop({ address }: { address: PublicKey }) {
   })
 }
 
-async function createTransaction({
-  publicKey,
-  destination,
-  amount,
-  connection,
-}: {
-  publicKey: PublicKey
-  destination: PublicKey
-  amount: number
-  connection: Connection
-}): Promise<{
-  transaction: VersionedTransaction
-  latestBlockhash: { blockhash: string; lastValidBlockHeight: number }
-}> {
-  // Get the latest blockhash to use in our transaction
-  const latestBlockhash = await connection.getLatestBlockhash()
+export function useInitializePoll() {
+  const { program } = useVotingProgram()
+  const client = useQueryClient()
 
-  // Create instructions to send, in this case a simple transfer
-  const instructions = [
-    SystemProgram.transfer({
-      fromPubkey: publicKey,
-      toPubkey: destination,
-      lamports: amount * LAMPORTS_PER_SOL,
-    }),
-  ]
+  return useMutation({
+    mutationKey: ['initialize-poll', { programId: program.programId.toString() }],
+    mutationFn: async (input: {
+      pollId: number
+      description: string
+      pollStart: number
+      pollEnd: number
+      signer: PublicKey
+    }) => {
+      const pollIdBN = new BN(input.pollId)
 
-  // Create a new TransactionMessage with version and compile it to legacy
-  const messageLegacy = new TransactionMessage({
-    payerKey: publicKey,
-    recentBlockhash: latestBlockhash.blockhash,
-    instructions,
-  }).compileToLegacyMessage()
+      return await program.methods
+        .initializePoll(pollIdBN, input.description, new BN(input.pollStart), new BN(input.pollEnd))
+        .accounts({
+          signer: input.signer,
+        })
+        .rpc()
+    },
+    onSuccess: (signature) => {
+      console.log('Poll initialization TX Sent:', signature)
+      client.invalidateQueries({ queryKey: ['get-polls'] })
+      client.invalidateQueries({ queryKey: ['get-candidates'] })
+    },
+  })
+}
 
-  // Create a new VersionedTransaction which supports legacy and v0
-  const transaction = new VersionedTransaction(messageLegacy)
+export function useInitializeCandidate() {
+  const { program } = useVotingProgram()
+  const client = useQueryClient()
 
-  return {
-    transaction,
-    latestBlockhash,
-  }
+  return useMutation({
+    mutationKey: ['initialize-candidate', { programId: program.programId.toString() }],
+    mutationFn: async (input: { pollId: number; candidateName: string; signer: PublicKey }) => {
+      const pollIdBN = new BN(input.pollId)
+
+      return await program.methods
+        .initializeCandidate(input.candidateName, pollIdBN)
+        .accounts({
+          signer: input.signer,
+        })
+        .rpc()
+    },
+    onSuccess: (signature) => {
+      console.log('Candidate created successfully:', signature)
+      client.invalidateQueries({ queryKey: ['get-polls'] })
+      client.invalidateQueries({ queryKey: ['get-candidates'] })
+    },
+  })
+}
+
+export function useAddApprovedCreator() {
+  const { program } = useVotingProgram()
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationKey: ['add-approved-creator', { programId: program.programId.toString() }],
+    mutationFn: async (input: { creatorWallet: PublicKey; superAdmin: PublicKey }) => {
+      return await program.methods
+        .addApprovedCreator(input.creatorWallet)
+        .accounts({
+          superAdmin: input.superAdmin,
+          creatorWallet: input.creatorWallet,
+        })
+        .rpc()
+    },
+    onSuccess: (signature) => {
+      console.log('Creator approved on-chain:', signature)
+      client.invalidateQueries({ queryKey: ['get-approved-creators'] })
+      client.invalidateQueries({ queryKey: ['wallet-role'] })
+    },
+  })
+}
+
+export function useCastVote({ pollId }: { pollId: number }) {
+  const { program } = useVotingProgram()
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationKey: ['cast-vote', { programId: program.programId.toString(), pollId }],
+    mutationFn: async (input: { candidateName: string; signer: PublicKey }) => {
+      const pollIdBN = new BN(pollId)
+      const [pollPda] = PublicKey.findProgramAddressSync([pollIdBN.toArrayLike(Buffer, 'le', 8)], program.programId)
+      const [candidatePda] = PublicKey.findProgramAddressSync(
+        [pollIdBN.toArrayLike(Buffer, 'le', 8), Buffer.from(input.candidateName)],
+        program.programId,
+      )
+      const [voteRecordPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from('vote_record'), pollPda.toBuffer(), input.signer.toBuffer()],
+        program.programId,
+      )
+      return await (program.methods as any)
+        .vote(pollIdBN, input.candidateName)
+        .accounts({
+          signer: input.signer,
+          poll: pollPda,
+          candidate: candidatePda,
+          voteRecord: voteRecordPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc()
+    },
+    onSuccess: (signature) => {
+      console.log('Vote cast successfully!', signature)
+      client.invalidateQueries({ queryKey: ['get-polls'] })
+      client.invalidateQueries({ queryKey: ['get-candidates', { pollId }] })
+    },
+    onError: (error) => {
+      console.error('Voting failed:', error)
+    },
+  })
 }
 
 export function useWalletRole({ address }: { address: PublicKey }) {
@@ -181,13 +293,7 @@ export function useWalletRole({ address }: { address: PublicKey }) {
         if (config.admin.toString() === address.toString()) {
           return 'superadmin'
         }
-      } catch {
-        // config not initialized yet
-      }
-
-      // =====================================
-      // 2. Check if approved creator exists
-      // =====================================
+      } catch {}
 
       const [approvedCreatorPda] = PublicKey.findProgramAddressSync(
         [Buffer.from('approved_creator'), address.toBuffer()],
@@ -202,6 +308,8 @@ export function useWalletRole({ address }: { address: PublicKey }) {
 
       return 'voter'
     },
+    refetchInterval: 2000,
+    staleTime: 0,
   })
 }
 
@@ -240,9 +348,10 @@ export function useGetPolls() {
         }
       })
     },
+    refetchInterval: 2000,
+    staleTime: 0,
   })
 }
-
 
 export function useGetApprovedCreators() {
   const { program } = useVotingProgram()
@@ -256,7 +365,6 @@ export function useGetApprovedCreators() {
         const account = c.account
 
         return {
-          // Correct field names from your IDL schema:
           wallet: account.creator.toString(),
           addedBy: account.addedBy.toString(),
           addedAt: account.addedAt ? new Date(account.addedAt.toNumber() * 1000).toISOString().split('T')[0] : 'N/A',
@@ -266,21 +374,27 @@ export function useGetApprovedCreators() {
   })
 }
 
-// export function useGetTokenAccounts({ address }: { address: PublicKey }) {
-//   const { connection } = useConnection()
-
-//   return useQuery({
-//     queryKey: ['get-token-accounts', { endpoint: connection.rpcEndpoint, address }],
-//     queryFn: async () => {
-//       const [tokenAccounts, token2022Accounts] = await Promise.all([
-//         connection.getParsedTokenAccountsByOwner(address, {
-//           programId: TOKEN_PROGRAM_ID,
-//         }),
-//         connection.getParsedTokenAccountsByOwner(address, {
-//           programId: TOKEN_2022_PROGRAM_ID,
-//         }),
-//       ])
-//       return [...tokenAccounts.value, ...token2022Accounts.value]
-//     },
-//   })
-// }
+export function useGetCandidates({ pollId }: { pollId: number }) {
+  const { program } = useVotingProgram()
+  return useQuery({
+    queryKey: ['get-candidates', { programId: program.programId.toString(), pollId }],
+    queryFn: async (): Promise<Candidate[]> => {
+      const pollIdBN = new BN(pollId)
+      const [pollPda] = PublicKey.findProgramAddressSync([pollIdBN.toArrayLike(Buffer, 'le', 8)], program.programId)
+      const candidates = await program.account.candidate.all([
+        {
+          memcmp: {
+            offset: 8,
+            bytes: pollPda.toBase58(),
+          },
+        },
+      ])
+      return candidates.map((c) => ({
+        name: c.account.candidateName,
+        votes: c.account.candidateVotes.toNumber(),
+      }))
+    },
+    refetchInterval: 2000,
+    staleTime: 0,
+  })
+}
