@@ -1,200 +1,113 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ExplorerLink } from '../cluster/cluster-ui'
-import { BarChart2, CheckCircle2, Plus, Timer, User, X, XCircle } from 'lucide-react'
-import { useCastVote, useInitializeCandidate, useInitializePoll } from './account-data-access'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation' // swap for your router if needed
+import {
+  BarChart2, CheckCircle2, Timer, XCircle,
+  PlusCircle, X, ArrowRight, ShieldCheck,
+} from 'lucide-react'
 import { useWallet } from '@solana/wallet-adapter-react'
-import { ChevronDown, Clock, PlusCircle } from 'lucide-react'
-import { formatCountdown } from '@/lib/utils'
-import { useGetCandidates, useGetPolls } from './account-data-access'
-import { Poll } from '../interface'
+import { useGetCandidates, useInitializePoll, useGetPolls } from '@/components/account/account-data-access'
+import { Poll } from '@/components/interface'
 
-interface CreatePollModalProps {
-  isOpen: boolean
-  onClose: () => void
-}
+
 function StatusBadge({ status }: { status: Poll['status'] }) {
   const map = {
     active: {
       icon: <CheckCircle2 className="h-3 w-3" />,
       label: 'Live',
-      className: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300',
+      className: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800',
     },
     upcoming: {
       icon: <Timer className="h-3 w-3" />,
       label: 'Upcoming',
-      className: 'text-violet-700 bg-violet-50 dark:bg-violet-950 dark:text-violet-300',
+      className: 'text-violet-700 bg-violet-50 dark:bg-violet-950 dark:text-violet-300 ring-1 ring-violet-200 dark:ring-violet-800',
     },
     ended: {
       icon: <XCircle className="h-3 w-3" />,
       label: 'Ended',
-      className: 'text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-400',
+      className: 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-slate-700',
     },
   }
   const { icon, label, className } = map[status]
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${className}`}>
-      {icon}
-      {label}
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${className}`}>
+      {icon}{label}
     </span>
   )
 }
 
-function pollProgress(poll: Poll): number {
-  const total = poll.end - poll.start
-  const elapsed = Date.now() - poll.start
-  return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)))
-}
-
-function PollCard({ poll, canVote, canCreate }: { poll: any; canVote: boolean; canCreate: boolean }) {
-  const [open, setOpen] = useState(false)
-  const [, forceTick] = useState(0)
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      forceTick((v) => v + 1)
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [])
-  const { data: candidates = [], isLoading } = useGetCandidates({ pollId: poll.id })
+/* ─────────────────────────────────────────────
+   POLL ROW — one row per poll in the list
+   Clicking navigates to the Detail page.
+───────────────────────────────────────────── */
+function PollRow({ poll, onClick }: { poll: Poll; onClick: () => void }) {
+  const { data: candidates = [] } = useGetCandidates({ pollId: poll.id })
   const totalVotes = candidates.reduce((a, c) => a + c.votes, 0)
 
-  const nowMs = Date.now()
-  const hasStarted = nowMs >= poll.start
-  const hasEnded = nowMs >= poll.end
-  const isUpcoming = !hasStarted
+  const isActive = poll.status === 'active'
+  const isUpcoming = poll.status === 'upcoming'
 
   return (
-    <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 transition-all">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-4 px-6 py-5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
-        aria-expanded={open}
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-semibold text-base">{poll.title}</span>
-            <StatusBadge status={poll.status} />
-          </div>
+    <button
+      onClick={onClick}
+      className="group w-full text-left flex items-center gap-5 px-6 py-5
+                 bg-white dark:bg-slate-900
+                 border border-slate-200 dark:border-slate-800
+                 rounded-2xl
+                 hover:border-violet-300 dark:hover:border-violet-700
+                 hover:shadow-md hover:shadow-violet-500/5
+                 transition-all duration-200"
+    >
+      {/* Left accent bar */}
+      <div
+        className={`w-1 self-stretch rounded-full flex-shrink-0 transition-colors
+          ${isActive ? 'bg-emerald-400' : isUpcoming ? 'bg-violet-400' : 'bg-slate-200 dark:bg-slate-700'}`}
+      />
 
-          <p className="text-sm text-slate-500 mt-1.5">
-            {isLoading ? (
-              <span className="text-xs animate-pulse">Loading choices...</span>
-            ) : (
-              `${candidates.length} candidates · ${totalVotes} votes`
-            )}
-          </p>
+      {/* Main content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-3 flex-wrap mb-1.5">
+          <span className="font-semibold text-base text-slate-900 dark:text-slate-100 truncate">
+            {poll.title}
+          </span>
+          <StatusBadge status={poll.status} />
         </div>
 
-        <ChevronDown
-          className={`h-5 w-5 text-slate-400 flex-shrink-0 transition-transform duration-200 ${
-            open ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
+        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">
+          {poll.description}
+        </p>
 
-      {open && (
-        <div className="px-6 pb-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40">
-          <p className="text-base text-slate-600 dark:text-slate-400 mt-5 mb-5 leading-relaxed">{poll.description}</p>
-
-          <div className="grid grid-cols-2 gap-5 mb-5 text-sm">
-            <div>
-              <span className="text-slate-400 block mb-1">Poll ID (PDA seed)</span>
-              <span className="font-mono font-medium break-all">{poll.id}</span>
-            </div>
-
-            <div>
-              {/* Highlight-start */}
-              <span className="text-slate-400 block mb-1">{isUpcoming ? 'Starts' : 'Ends'}</span>
-              <span className="font-medium">{new Date(isUpcoming ? poll.start : poll.end).toLocaleDateString()}</span>
-              {/* Highlight-end */}
-            </div>
-          </div>
-
-          {/* Highlight-start */}
-          {/* Dynamic Timelines and Countdowns */}
-          {isUpcoming && (
-            <div className="mb-6 bg-amber-500/10 border border-amber-500/20 px-4 py-3 rounded-xl">
-              <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
-                <Clock className="h-4 w-4 animate-pulse" />
-                <span>
-                  Voting begins in: <strong>{formatCountdown(poll.start)}</strong>
-                </span>
-              </div>
-            </div>
-          )}
-
-          {poll.status === 'active' && hasStarted && !hasEnded && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 text-sm font-medium text-violet-700 dark:text-violet-300 mb-2">
-                <Clock className="h-4 w-4" />
-                {formatCountdown(poll.end)} remaining
-              </div>
-
-              <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-violet-500 rounded-full transition-all"
-                  style={{ width: `${pollProgress(poll)}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {/* Highlight-end */}
-
-          {isLoading ? (
-            <div className="py-4 space-y-2">
-              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse w-3/4"></div>
-              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse w-1/2"></div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {candidates.map((c) => {
-                const pct = totalVotes ? Math.round((c.votes / totalVotes) * 100) : 0
-
-                return (
-                  <div key={c.name} className="flex items-center gap-4">
-                    <span className="text-sm w-28 flex-shrink-0 font-medium truncate" title={c.name}>
-                      {c.name}
-                    </span>
-
-                    <div className="flex-1 h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                    </div>
-
-                    <span className="text-sm text-slate-500 w-12 text-right font-medium">
-                      {c.votes} ({pct}%)
-                    </span>
-                    {canVote && poll.status === 'active' && hasStarted && (
-                      <VoteButton pollId={poll.id} candidateName={c.name} />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {canCreate && <AddCandidateForm pollId={poll.id} pollStart={poll.start} />}
-
-          <div className="mt-5 pt-5 border-t border-slate-200 dark:border-slate-700">
-            <ExplorerLink
-              path={`account/${poll.id}`}
-              label="View Poll PDA on Explorer →"
-              className="text-sm text-slate-400 hover:text-blue-500 transition-colors"
-            />
-          </div>
+        <div className="flex items-center gap-4 mt-2.5 text-xs text-slate-400">
+          <span>{candidates.length} candidates</span>
+          <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
+          <span>{totalVotes} votes cast</span>
+          <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
+          <span>
+            {poll.status === 'upcoming'
+              ? `Starts ${new Date(poll.start).toLocaleDateString()}`
+              : `Ends ${new Date(poll.end).toLocaleDateString()}`}
+          </span>
         </div>
-      )}
-    </div>
+      </div>
+
+      {/* Right arrow — shows on hover */}
+      <div className="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center
+                      bg-slate-100 dark:bg-slate-800
+                      group-hover:bg-violet-600 group-hover:text-white
+                      text-slate-400 transition-all duration-200">
+        <ArrowRight className="h-4 w-4" />
+      </div>
+    </button>
   )
 }
 
-function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
+/* ─────────────────────────────────────────────
+   CREATE POLL MODAL — identical to before
+───────────────────────────────────────────── */
+function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { publicKey } = useWallet()
   const mutation = useInitializePoll()
-
-  // Form State
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -205,105 +118,64 @@ function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg('')
+    if (!publicKey) { setErrorMsg('Wallet connection required.'); return }
 
-    if (!publicKey) {
-      setErrorMsg('Wallet connection required.')
-      return
-    }
-
-    // Convert local HTML datetime-local strings to unix timestamps (seconds)
     const startUnix = Math.floor(new Date(startDate).getTime() / 1000)
     const endUnix = Math.floor(new Date(endDate).getTime() / 1000)
+    if (endUnix <= startUnix) { setErrorMsg('End time must be after start time.'); return }
 
-    if (endUnix <= startUnix) {
-      setErrorMsg('The poll end time must be further in the future than the start time.')
-      return
-    }
-
-    // Generate a random u64 numeric ID safely within JavaScript numbers limitations
-    const randomPollId = Math.floor(Math.random() * 1000000)
+    const randomPollId = Math.floor(Math.random() * 1_000_000)
 
     mutation.mutate(
+      { pollId: randomPollId, description: description.trim(), pollStart: startUnix, pollEnd: endUnix, signer: publicKey },
       {
-        pollId: randomPollId,
-        description: description.trim(),
-        pollStart: startUnix,
-        pollEnd: endUnix,
-        signer: publicKey,
-      },
-      {
-        onSuccess: () => {
-          // Reset fields on success
-          setDescription('')
-          setStartDate('')
-          setEndDate('')
-          onClose()
-        },
-        onError: (err: any) => {
-          setErrorMsg(err?.message || 'Transaction processing failed. Are you an Approved Creator?')
-        },
+        onSuccess: () => { setDescription(''); setStartDate(''); setEndDate(''); onClose() },
+        onError: (err: any) => setErrorMsg(err?.message || 'Transaction failed. Are you an Approved Creator?'),
       },
     )
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <BarChart2 className="h-5 w-5 text-violet-600" />
-            Create New Proposal Poll
+            Create New Poll
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
               Proposal / Description
             </label>
             <textarea
-              required
-              rows={3}
-              maxLength={280} // Bound to match your Rust contract `#[max_len(280)]`
-              placeholder="What proposal rule should the DAO vote on?"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              required rows={3} maxLength={280}
+              placeholder="What should the DAO vote on?"
+              value={description} onChange={(e) => setDescription(e.target.value)}
               disabled={mutation.isPending}
-              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm resize-none"
+              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none text-sm resize-none"
             />
-            <p className="text-right text-xs text-slate-400 mt-1">{description.length}/280 characters</p>
+            <p className="text-right text-xs text-slate-400 mt-1">{description.length}/280</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Start Window
-              </label>
-              <input
-                type="datetime-local"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={mutation.isPending}
-                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 text-sm outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">End Window</label>
-              <input
-                type="datetime-local"
-                required
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                disabled={mutation.isPending}
-                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 text-sm outline-none"
-              />
-            </div>
+            {[
+              { label: 'Start Window', value: startDate, onChange: setStartDate },
+              { label: 'End Window', value: endDate, onChange: setEndDate },
+            ].map(({ label, value, onChange }) => (
+              <div key={label}>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">{label}</label>
+                <input type="datetime-local" required value={value}
+                  onChange={(e) => onChange(e.target.value)} disabled={mutation.isPending}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 text-sm outline-none"
+                />
+              </div>
+            ))}
           </div>
 
           {errorMsg && (
@@ -312,29 +184,16 @@ function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
             </p>
           )}
 
-          {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={mutation.isPending}
-              className="px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
-            >
+            <button type="button" onClick={onClose} disabled={mutation.isPending}
+              className="px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="px-5 py-2.5 text-sm font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:bg-violet-400 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
-            >
+            <button type="submit" disabled={mutation.isPending}
+              className="px-5 py-2.5 text-sm font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:bg-violet-400 rounded-xl flex items-center gap-2 shadow-sm transition-colors">
               {mutation.isPending ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Broadcasting...
-                </>
-              ) : (
-                'Initialize Poll'
-              )}
+                <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />Broadcasting...</>
+              ) : 'Initialize Poll'}
             </button>
           </div>
         </form>
@@ -343,321 +202,136 @@ function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
   )
 }
 
-interface VoteButtonProps {
-  pollId: number
-  candidateName: string
-}
-
-export function VoteButton({ pollId, candidateName }: VoteButtonProps) {
-  const { publicKey } = useWallet()
-  const [showModal, setShowModal] = useState(false)
-  const castVoteMutation = useCastVote({ pollId })
-
-  const handleVoteConfirm = async () => {
-    if (!publicKey) return
-
-    try {
-      await castVoteMutation.mutateAsync({
-        candidateName,
-        signer: publicKey,
-      })
-    } catch (e) {
-      console.error('Voting failed:', e)
-    } finally {
-      setShowModal(false) // Close modal after TX finishes
-    }
-  }
-
+/* ─────────────────────────────────────────────
+   SECTION HEADER with live count badge
+───────────────────────────────────────────── */
+function SectionHeader({ label, count, color }: { label: string; count: number; color: string }) {
   return (
-    <>
-      {/* 1. Main Action Trigger Button */}
-      <button
-        onClick={() => setShowModal(true)}
-        disabled={castVoteMutation.isPending}
-        className="text-sm px-4 py-2 rounded-lg bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors flex-shrink-0 disabled:opacity-50"
-      >
-        {castVoteMutation.isPending ? 'Voting...' : 'Vote'}
-      </button>
-
-      {/* 2. Isolated Confirmation Popup Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Confirm Your Vote</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-              Are you sure you want to cast your vote for{' '}
-              <strong className="text-violet-600 dark:text-violet-400">"{candidateName}"</strong>? This will initiate a
-              blockchain transaction.
-            </p>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                disabled={castVoteMutation.isPending}
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm font-medium rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={castVoteMutation.isPending}
-                onClick={handleVoteConfirm}
-                className="px-4 py-2 text-sm font-medium rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-md transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                {castVoteMutation.isPending ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
-                    Signing...
-                  </>
-                ) : (
-                  'Confirm Vote'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  )
-}
-function AddCandidateForm({ pollId, pollStart }: { pollId: number; pollStart: number }) {
-  const { publicKey } = useWallet()
-  const mutation = useInitializeCandidate()
-  const [name, setName] = useState('')
-  const [errorMsg, setErrorMsg] = useState('')
-
-  // Disable UI if the poll has already begun
-  const isPolllStarted = Date.now() >= pollStart
-
-  if (isPolllStarted) {
-    return <p className="text-xs text-amber-500 italic">Voting window open. Candidate entries locked.</p>
-  }
-
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrorMsg('')
-
-    if (!publicKey) return
-    if (!name.trim()) return
-
-    mutation.mutate(
-      {
-        pollId,
-        candidateName: name.trim(),
-        signer: publicKey,
-      },
-      {
-        onSuccess: () => {
-          setName('') // Clear input on success
-        },
-        onError: (err: any) => {
-          setErrorMsg(err?.message || 'Failed to add candidate. Are you the poll authority?')
-        },
-      },
-    )
-  }
-
-  return (
-    <form onSubmit={handleAdd} className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
-      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
-        Add Option / Candidate
-      </label>
-
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            required
-            maxLength={280} // Bound to match your Candidate account state constraint
-            placeholder="e.g., Yes, No, John Doe"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={mutation.isPending}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl outline-none text-sm focus:ring-2 focus:ring-violet-500"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={mutation.isPending || !name.trim()}
-          className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-sm font-medium hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors flex items-center gap-1 disabled:opacity-50"
-        >
-          {mutation.isPending ? (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-          ) : (
-            <>
-              <Plus className="h-4 w-4" />
-              Add
-            </>
-          )}
-        </button>
-      </div>
-
-      {errorMsg && <p className="text-xs font-medium text-red-500 mt-1">{errorMsg}</p>}
-    </form>
-  )
-}
-
-// Inside your main Component:
-export function PollItemComponent({ poll, candidates, totalVotes, canVote, hasStarted }) {
-  const { publicKey } = useWallet()
-  const castVoteMutation = useCastVote({ pollId: poll.id })
-
-  // Local state for handling the confirmation modal
-  const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
-
-  const handleVoteConfirm = async () => {
-    if (!publicKey || !selectedCandidate) return
-
-    try {
-      await castVoteMutation.mutateAsync({
-        candidateName: selectedCandidate,
-        signer: publicKey,
-      })
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setSelectedCandidate(null) // Close popup
-    }
-  }
-
-  return (
-    <div className="relative">
-      {/* CANDIDATES LIST */}
-      <div className="space-y-4">
-        {candidates.map((c) => {
-          const pct = totalVotes ? Math.round((c.votes / totalVotes) * 100) : 0
-
-          return (
-            <div key={c.name} className="flex items-center gap-4">
-              <span className="text-sm w-28 flex-shrink-0 font-medium truncate" title={c.name}>
-                {c.name}
-              </span>
-
-              <div className="flex-1 h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-              </div>
-
-              <span className="text-sm text-slate-500 w-12 text-right font-medium">
-                {c.votes} ({pct}%)
-              </span>
-
-              {canVote && poll.status === 'active' && hasStarted && (
-                <button
-                  onClick={() => setSelectedCandidate(c.name)}
-                  disabled={castVoteMutation.isPending}
-                  className="text-sm px-4 py-2 rounded-lg bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors flex-shrink-0 disabled:opacity-50"
-                >
-                  {castVoteMutation.isPending && selectedCandidate === c.name ? 'Voting...' : 'Vote'}
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* CONFIRMATION POPUP MODAL */}
-      {selectedCandidate && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-sm w-full shadow-xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Confirm Your Vote</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Are you sure you want to cast your vote for{' '}
-              <strong className="text-violet-600 dark:text-violet-400">"{selectedCandidate}"</strong>? This action
-              cannot be undone.
-            </p>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                disabled={castVoteMutation.isPending}
-                onClick={() => setSelectedCandidate(null)}
-                className="px-4 py-2 text-sm font-medium rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={castVoteMutation.isPending}
-                onClick={handleVoteConfirm}
-                className="px-4 py-2 text-sm font-medium rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                {castVoteMutation.isPending ? 'Processing...' : 'Confirm & Cast'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="flex items-center gap-3 mb-3">
+      <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{label}</span>
+      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>{count}</span>
+      <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800" />
     </div>
   )
 }
-export function PollsTab({ canVote, canCreate }: { canVote: boolean; canCreate: boolean }) {
+
+/* ─────────────────────────────────────────────
+   MAIN EXPORT: PollListPage
+   Props: canVote, canCreate (same as before)
+───────────────────────────────────────────── */
+export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCreate: boolean }) {
+  const router = useRouter()
   const { data: polls = [], isLoading } = useGetPolls()
-  const [isPollModalOpen, setIsPollModalOpen] = useState(false)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+
+  const active   = polls.filter((p) => p.status === 'active')
+  const upcoming = polls.filter((p) => p.status === 'upcoming')
+  const ended    = polls.filter((p) => p.status === 'ended')
+
+  const handlePollClick = (poll: Poll) => {
+    router.push(`/polls/${poll.id}`)
+  }
+
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+      <div className="flex justify-center items-center py-24">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      {canCreate && (
-        <div className="flex items-center justify-between">
-          <p className="text-base text-slate-500 leading-relaxed">
-            You have an{' '}
-            <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm">ApprovedCreator</code> PDA — you
-            can create polls.
-          </p>
+    <div className=" mx-auto px-4 py-10 space-y-10">
 
+      {/* ── Page Header ── */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            Governance Polls
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1.5 text-sm">
+            {polls.length} proposal{polls.length !== 1 ? 's' : ''} on-chain
+            {canCreate && (
+              <span className="ml-2 inline-flex items-center gap-1 text-violet-600 dark:text-violet-400 font-medium">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Approved Creator
+              </span>
+            )}
+          </p>
+        </div>
+
+        {canCreate && (
           <button
-            onClick={() => setIsPollModalOpen(true)}
-            className="flex items-center gap-2 text-base px-5 py-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 transition-colors shadow-sm shadow-violet-500/20 flex-shrink-0"
           >
             <PlusCircle className="h-5 w-5" />
-            Create poll
+            New Poll
           </button>
+        )}
+      </div>
+
+      {/* ── Empty state ── */}
+      {polls.length === 0 && (
+        <div className="text-center py-20 text-slate-400">
+          <BarChart2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No polls on-chain yet.</p>
+          {canCreate && (
+            <p className="text-sm mt-1">Create the first one above.</p>
+          )}
         </div>
       )}
 
-      <div className="space-y-4">
-        {polls.length === 0 ? (
-          <div className="text-center text-slate-500 py-12">No polls found on-chain.</div>
-        ) : (
-          polls.map((p) => <PollCard key={p.id} poll={p} canVote={canVote} canCreate={canCreate} />)
-        )}
-      </div>
-      <CreatePollModal isOpen={isPollModalOpen} onClose={() => setIsPollModalOpen(false)} />
-    </div>
-  )
-}
+      {/* ── Active Polls ── */}
+      {active.length > 0 && (
+        <section>
+          <SectionHeader
+            label="Live now"
+            count={active.length}
+            color="text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300"
+          />
+          <div className="space-y-3">
+            {active.map((p) => (
+              <PollRow key={p.id} poll={p} onClick={() => handlePollClick(p)} />
+            ))}
+          </div>
+        </section>
+      )}
 
-export function VoteTab() {
-  const { data: polls = [], isLoading } = useGetPolls()
-  const active = polls.filter((p) => p.status === 'active')
-  const other = polls.filter((p) => p.status !== 'active')
+      {/* ── Upcoming Polls ── */}
+      {upcoming.length > 0 && (
+        <section>
+          <SectionHeader
+            label="Upcoming"
+            count={upcoming.length}
+            color="text-violet-700 bg-violet-50 dark:bg-violet-950 dark:text-violet-300"
+          />
+          <div className="space-y-3">
+            {upcoming.map((p) => (
+              <PollRow key={p.id} poll={p} onClick={() => handlePollClick(p)} />
+            ))}
+          </div>
+        </section>
+      )}
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
-      </div>
-    )
-  }
+      {/* ── Ended Polls ── */}
+      {ended.length > 0 && (
+        <section>
+          <SectionHeader
+            label="Ended"
+            count={ended.length}
+            color="text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400"
+          />
+          <div className="space-y-3">
+            {ended.map((p) => (
+              <PollRow key={p.id} poll={p} onClick={() => handlePollClick(p)} />
+            ))}
+          </div>
+        </section>
+      )}
 
-  return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        {active.length === 0 ? (
-          <p className="text-base text-slate-400 py-8 text-center">No active polls right now.</p>
-        ) : (
-          active.map((p) => <PollCard key={p.id} poll={p} canVote={true} canCreate={false} />)
-        )}
-
-        {other.map((p) => (
-          <PollCard key={p.id} poll={p} canVote={false} canCreate={false} />
-        ))}
-      </div>
+      {/* ── Create Modal ── */}
+      <CreatePollModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
     </div>
   )
 }

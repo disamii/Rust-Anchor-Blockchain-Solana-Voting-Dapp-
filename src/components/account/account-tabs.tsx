@@ -24,7 +24,7 @@ import { Poll } from '../interface'
 import { useGetApprovedCreators,  useWalletRole } from './account-data-access'
 import { useAddApprovedCreator } from './account-data-access' 
 import { useWallet } from '@solana/wallet-adapter-react'
-import { PollsTab, VoteTab } from './poll'
+// import { PollsTab, VoteTab } from './poll'
 
 interface AddCreatorModalProps {
   isOpen: boolean
@@ -251,11 +251,7 @@ export default function RoleDashboard({ address }: { address: PublicKey }) {
           icon: <Users className="h-5 w-5" />,
           content: <AdminsTab />,
         },
-        {
-          label: 'Polls',
-          icon: <ClipboardList className="h-5 w-5" />,
-          content: <PollsTab canVote={false} canCreate={false} />,
-        },
+  
         {
           label: 'Transactions',
           icon: <History className="h-5 w-5" />,
@@ -265,11 +261,7 @@ export default function RoleDashboard({ address }: { address: PublicKey }) {
 
     if (role === 'admin')
       return [
-        {
-          label: 'My Polls',
-          icon: <ClipboardList className="h-5 w-5" />,
-          content: <PollsTab canVote={true} canCreate={true} />,
-        },
+  
         {
           label: 'Transactions',
           icon: <History className="h-5 w-5" />,
@@ -278,11 +270,7 @@ export default function RoleDashboard({ address }: { address: PublicKey }) {
       ]
 
     return [
-      {
-        label: 'Vote',
-        icon: <Vote className="h-5 w-5" />,
-        content: <VoteTab />,
-      },
+  
       {
         label: 'Transactions',
         icon: <History className="h-5 w-5" />,

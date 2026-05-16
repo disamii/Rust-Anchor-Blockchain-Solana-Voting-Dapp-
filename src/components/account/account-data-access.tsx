@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApprovedCreator, Candidate, Poll, Role } from '../interface'
 import { useVotingProgram } from '../voting/voting-data-access'
 import { BN } from '@coral-xyz/anchor'
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 
 async function createTransaction({
   publicKey,
@@ -54,6 +55,24 @@ async function createTransaction({
   }
 }
 
+export function useGetTokenAccounts({ address }: { address: PublicKey }) {
+  const { connection } = useConnection()
+
+  return useQuery({
+    queryKey: ['get-token-accounts', { endpoint: connection.rpcEndpoint, address }],
+    queryFn: async () => {
+      const [tokenAccounts, token2022Accounts] = await Promise.all([
+        connection.getParsedTokenAccountsByOwner(address, {
+          programId: TOKEN_PROGRAM_ID,
+        }),
+        connection.getParsedTokenAccountsByOwner(address, {
+          programId: TOKEN_2022_PROGRAM_ID,
+        }),
+      ])
+      return [...tokenAccounts.value, ...token2022Accounts.value]
+    },
+  })
+}
 export function useGetBalance({ address }: { address: PublicKey }) {
   const { connection } = useConnection()
 
