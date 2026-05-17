@@ -262,21 +262,31 @@ export function useCastVote({ pollId }: { pollId: number }) {
     mutationKey: ['cast-vote', { programId: program.programId.toString(), pollId }],
     mutationFn: async (input: { candidateName: string; signer: PublicKey }) => {
       const pollIdBN = new BN(pollId)
-      const [pollPda] = PublicKey.findProgramAddressSync([pollIdBN.toArrayLike(Buffer, 'le', 8)], program.programId)
+      const [pollPda] = PublicKey.findProgramAddressSync(
+        [pollIdBN.toArrayLike(Buffer, 'le', 8)],
+        program.programId
+      )
       const [candidatePda] = PublicKey.findProgramAddressSync(
         [pollIdBN.toArrayLike(Buffer, 'le', 8), Buffer.from(input.candidateName)],
-        program.programId,
+        program.programId
       )
       const [voteRecordPda] = PublicKey.findProgramAddressSync(
         [Buffer.from('vote_record'), pollPda.toBuffer(), input.signer.toBuffer()],
-        program.programId,
+        program.programId
       )
+      // ✅ NEW: derive the registered voter PDA
+      const [registeredVoterPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from('registered_voter'), pollPda.toBuffer(), input.signer.toBuffer()],
+        program.programId
+      )
+
       return await (program.methods as any)
         .vote(pollIdBN, input.candidateName)
         .accounts({
           signer: input.signer,
           poll: pollPda,
           candidate: candidatePda,
+          registeredVoter: registeredVoterPda,  
           voteRecord: voteRecordPda,
           systemProgram: SystemProgram.programId,
         })
@@ -292,7 +302,29 @@ export function useCastVote({ pollId }: { pollId: number }) {
     },
   })
 }
+export function useRemoveApprovedCreator() {
+  const { program } = useVotingProgram()
+  const client = useQueryClient()
 
+  return useMutation({
+    mutationKey: ['remove-approved-creator', { programId: program.programId.toString() }],
+    mutationFn: async (input: { creatorWallet: PublicKey; superAdmin: PublicKey }) => {
+      return await program.methods
+        .removeApprovedCreator(input.creatorWallet)
+        .accounts({
+          superAdmin: input.superAdmin,
+          creatorWallet: input.creatorWallet,
+        })
+        .rpc()
+    },
+    onSuccess: (signature) => {
+      console.log('Creator revoked on-chain:', signature)
+      // Invalidate the creators list so it auto-refreshes
+      client.invalidateQueries({ queryKey: ['get-approved-creators'] })
+      client.invalidateQueries({ queryKey: ['wallet-role'] })
+    },
+  })
+}
 export function useWalletRole({ address }: { address: PublicKey }) {
   const { program, programId } = useVotingProgram()
 
@@ -415,5 +447,65 @@ export function useGetCandidates({ pollId }: { pollId: number }) {
     },
     refetchInterval: 2000,
     staleTime: 0,
+  })
+}
+
+
+export function useRegisterVoter() {
+  const { program } = useVotingProgram()
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationKey: ['register-voter', { programId: program.programId.toString() }],
+    mutationFn: async (input: {
+      pollId: number
+      voterWallet: PublicKey
+      signer: PublicKey
+    }) => {
+      const pollIdBN = new BN(input.pollId)
+
+      return await program.methods
+        .registerVoter(pollIdBN, input.voterWallet)
+        .accounts({
+          signer: input.signer,
+          voterWallet: input.voterWallet,
+        })
+        .rpc()
+    },
+    onSuccess: (signature) => {
+      console.log('Voter registered:', signature)
+      client.invalidateQueries({ queryKey: ['get-registered-voters'] })
+    },
+  })
+}
+export function useGetRegisteredVoters({ pollId }: { pollId: number }) {
+  const { program } = useVotingProgram()
+
+  return useQuery({
+    queryKey: ['get-registered-voters', { pollId }],
+    queryFn: async () => {
+      const pollIdBN = new BN(pollId)
+      const [pollPda] = PublicKey.findProgramAddressSync(
+        [pollIdBN.toArrayLike(Buffer, 'le', 8)],
+        program.programId
+      )
+
+      const voters = await program.account.registeredVoter.all([
+        {
+          memcmp: {
+            offset: 8 + 32, // skip discriminator (8) + voter pubkey (32) to reach poll field
+            bytes: pollPda.toBase58(),
+          },
+        },
+      ])
+
+      return voters.map((v) => ({
+        voter: v.account.voter.toString(),
+        poll: v.account.poll.toString(),
+        registeredAt: new Date(v.account.registeredAt.toNumber() * 1000)
+          .toISOString()
+          .split('T')[0],
+      }))
+    },
   })
 }

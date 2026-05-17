@@ -175,8 +175,83 @@ pub mod voting {
         msg!("Total votes: {}", candidate.candidate_votes);
         Ok(())
     }
-}
+    pub fn register_voter(
+    ctx: Context<RegisterVoter>,
+    _poll_id: u64,
+    _voter: Pubkey,
+) -> Result<()> {
+    let record = &mut ctx.accounts.registered_voter;
+    record.voter = ctx.accounts.voter_wallet.key();
+    record.poll = ctx.accounts.poll.key();
+    record.registered_at = Clock::get()?.unix_timestamp;
 
+    msg!("Voter registered: {}", record.voter);
+    Ok(())
+}
+pub fn deregister_voter(
+    ctx: Context<DeregisterVoter>,
+    _poll_id: u64,
+    _voter: Pubkey,
+) -> Result<()> {
+    msg!("Voter removed: {}", ctx.accounts.registered_voter.voter);
+    Ok(())
+    // Anchor closes the PDA via `close = signer` below
+}
+}
+#[derive(Accounts)]
+#[instruction(poll_id: u64, _voter: Pubkey)]
+pub struct RegisterVoter<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,          // must be the poll authority
+
+    #[account(
+        seeds = [poll_id.to_le_bytes().as_ref()],
+        bump,
+        // only the poll creator can register voters
+        constraint = poll.authority == signer.key() @ VotingError::Unauthorized
+    )]
+    pub poll: Account<'info, Poll>,
+
+    /// CHECK: just need the address to derive the PDA
+    pub voter_wallet: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + RegisteredVoter::INIT_SPACE,
+        // KEY INSIGHT: seeds bind this approval to ONE specific poll
+        // same voter can be registered on different polls separately
+        seeds = [b"registered_voter", poll.key().as_ref(), voter_wallet.key().as_ref()],
+        bump
+    )]
+    pub registered_voter: Account<'info, RegisteredVoter>,
+
+    pub system_program: Program<'info, System>,
+}
+#[derive(Accounts)]
+#[instruction(poll_id: u64, _voter: Pubkey)]
+pub struct DeregisterVoter<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(
+        seeds = [poll_id.to_le_bytes().as_ref()],
+        bump,
+        constraint = poll.authority == signer.key() @ VotingError::Unauthorized
+    )]
+    pub poll: Account<'info, Poll>,
+
+    /// CHECK: just need address to find the PDA
+    pub voter_wallet: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"registered_voter", poll.key().as_ref(), voter_wallet.key().as_ref()],
+        bump,
+        close = signer   // deletes PDA, returns rent SOL to poll creator
+    )]
+    pub registered_voter: Account<'info, RegisteredVoter>,
+}
 // =============================================
 // ACCOUNT CONTEXTS
 // =============================================
@@ -350,6 +425,14 @@ pub struct CastVote<'info> {
     )]
     pub poll: Account<'info, Poll>,
 
+    // ✅ NEW: voter must be registered for THIS poll
+    // if PDA doesn't exist → tx rejected automatically, no require! needed
+    #[account(
+        seeds = [b"registered_voter", poll.key().as_ref(), signer.key().as_ref()],
+        bump
+    )]
+    pub registered_voter: Account<'info, RegisteredVoter>,
+
     #[account(
         mut,
         seeds = [poll_id.to_le_bytes().as_ref(), candidate_name.as_bytes()],
@@ -369,11 +452,16 @@ pub struct CastVote<'info> {
 
     pub system_program: Program<'info, System>,
 }
-
 // =============================================
 // ACCOUNT STRUCTS
 // =============================================
-
+#[account]
+#[derive(InitSpace)]
+pub struct RegisteredVoter {
+    pub voter:           Pubkey,
+    pub poll:            Pubkey,
+    pub registered_at:   i64,
+}
 #[account]
 #[derive(InitSpace)]
 pub struct Config {
@@ -439,4 +527,6 @@ pub enum VotingError {
 
     #[msg("This candidate does not belong to this poll")]
     CandidateNotInPoll,
+    #[msg("You are not registered to vote in this poll")]
+    NotRegisteredVoter,
 }

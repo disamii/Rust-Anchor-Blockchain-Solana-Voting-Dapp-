@@ -1,6 +1,5 @@
 'use client'
 
-// 1. Update these to the new names we created in the exports file
 import { useConnection } from '@solana/wallet-adapter-react'
 import { Cluster, Keypair, PublicKey } from '@solana/web3.js'
 import { useMutation, useQuery } from '@tanstack/react-query'

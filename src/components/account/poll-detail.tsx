@@ -1,43 +1,23 @@
 'use client'
 
-/**
- * PAGE 2: Poll Detail Page
- *
- * CONCEPT: A focused voting room. One poll at a time. Big, clear candidate
- * cards that you click to vote — no more tiny "Vote" buttons crammed into a
- * progress bar row. The live countdown and progress live at the top as the
- * "hero" of the page.
- *
- * HOW IT FITS IN YOUR APP:
- *  - Create a route like  /polls/[pollId]/page.tsx
- *  - Receive pollId from URL params, pass it here as a prop.
- *  - Example:
- *      export default function PollDetailRoute({ params }) {
- *        return <PollDetailPage pollId={Number(params.pollId)} canVote canCreate />
- *      }
- *
- * LOGIC CHANGES: NONE. Same hooks, same mutations.
- *
- * WEB3 CONCEPT EXPLAINED (for learning):
- *  - Each poll and candidate lives in a "PDA" (Program Derived Address) on Solana.
- *  - A PDA is an account whose address is deterministically derived from seeds
- *    (e.g. poll_id + "poll") so your frontend can always compute the right
- *    address without storing it anywhere.
- *  - When you vote, a "VoteRecord" PDA is created for YOUR wallet + poll.
- *    Because PDAs are unique, Solana itself prevents double-voting — if you
- *    try to vote again, the account already exists and the TX fails.
- */
-
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, CheckCircle2, Timer, XCircle, Clock,
-  User, Plus, ShieldCheck, BarChart2, ExternalLink,
+  User, Plus, ShieldCheck, Trash2, Users, UserCheck, UserX,
 } from 'lucide-react'
 import { useWallet } from '@solana/wallet-adapter-react'
+import { PublicKey } from '@solana/web3.js'
 
 import { formatCountdown } from '@/lib/utils'
-import { useCastVote, useInitializeCandidate, useGetPolls, useGetCandidates } from '@/components/account/account-data-access'
+import {
+  useCastVote,
+  useInitializeCandidate,
+  useGetPolls,
+  useGetCandidates,
+  useRegisterVoter,         // ← NEW hook (add to account-data-access)
+  useGetRegisteredVoters,   // ← NEW hook (add to account-data-access)
+} from '@/components/account/account-data-access'
 import { ExplorerLink } from '@/components/cluster/cluster-ui'
 import { Poll } from '@/components/interface'
 
@@ -51,12 +31,9 @@ function pollProgress(poll: Poll): number {
 }
 
 /* ─────────────────────────────────────────────
-   COUNTDOWN HERO — top of the detail page
-   Shows a live countdown + progress bar when active,
-   or a "starts in" banner when upcoming.
+   COUNTDOWN HERO — unchanged from original
 ───────────────────────────────────────────── */
 function CountdownHero({ poll }: { poll: Poll }) {
-  // Force re-render every second so the countdown ticks live
   const [, tick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => tick((v) => v + 1), 1000)
@@ -84,7 +61,7 @@ function CountdownHero({ poll }: { poll: Poll }) {
           Voting opens in <strong className="ml-1">{formatCountdown(poll.start)}</strong>
         </div>
         <p className="text-xs text-amber-600/80 dark:text-amber-500/80 mt-1">
-          Candidates can still be added until the poll starts.
+          Candidates and voters can still be registered until the poll starts.
         </p>
       </div>
     )
@@ -115,9 +92,14 @@ function CountdownHero({ poll }: { poll: Poll }) {
 }
 
 /* ─────────────────────────────────────────────
-   CANDIDATE CARD — the main voting UI
-   Each candidate is a full clickable card.
-   Replaces the cramped progress-bar-row design.
+   CANDIDATE CARD
+   
+   NEW: receives `isRegisteredVoter` prop
+   - If voting is open AND user is NOT registered → show "Not Registered" badge instead of Vote button
+   - If voting is open AND user IS registered → show Vote button as before
+   
+   WHY: The on-chain program will reject the tx anyway if not registered,
+   but we give clear UI feedback so the user isn't confused by a failed tx.
 ───────────────────────────────────────────── */
 interface CandidateCardProps {
   name: string
@@ -126,9 +108,12 @@ interface CandidateCardProps {
   canVote: boolean
   isActive: boolean
   pollId: number
+  isRegisteredVoter: boolean   // ← NEW PROP
 }
 
-function CandidateCard({ name, votes, totalVotes, canVote, isActive, pollId }: CandidateCardProps) {
+function CandidateCard({
+  name, votes, totalVotes, canVote, isActive, pollId, isRegisteredVoter
+}: CandidateCardProps) {
   const { publicKey } = useWallet()
   const castVoteMutation = useCastVote({ pollId })
   const [showConfirm, setShowConfirm] = useState(false)
@@ -147,15 +132,43 @@ function CandidateCard({ name, votes, totalVotes, canVote, isActive, pollId }: C
     }
   }
 
+  // Decide what to show in the right slot of the card
+  // CONCEPT: We compute this once and render it below — keeps JSX clean
+  const actionSlot = (() => {
+    if (!isActive) return null                    // poll not active, show nothing
+
+    if (!canVote) return null                     // superadmin / creator role, show nothing
+
+    if (!isRegisteredVoter) {
+      // Voter role but NOT registered for this specific poll
+      return (
+        <span className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl
+                         bg-slate-100 dark:bg-slate-800 text-slate-400 text-xs font-medium">
+          <UserX className="h-3.5 w-3.5" />
+          Not registered
+        </span>
+      )
+    }
+
+    // Registered voter — show the vote button
+    return (
+      <button
+        onClick={() => !isPending && setShowConfirm(true)}
+        disabled={isPending}
+        className="flex-shrink-0 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700
+                   text-white text-sm font-bold transition-colors disabled:opacity-60
+                   flex items-center gap-2 shadow-sm"
+      >
+        {isPending
+          ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+          : 'Vote'}
+      </button>
+    )
+  })()
+
   return (
     <>
       <div className="relative overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-        {/* Bottom fill bar showing vote % */}
-        <div
-          className="absolute bottom-0 left-0 h-1 bg-emerald-400 dark:bg-emerald-500 transition-all duration-700"
-          // style={{ width: `${pct}%` }}
-        />
-
         <div className="px-5 py-4 flex items-center gap-4">
           {/* Avatar */}
           <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
@@ -178,22 +191,12 @@ function CandidateCard({ name, votes, totalVotes, canVote, isActive, pollId }: C
             </div>
           </div>
 
-          {/* Vote button — always visible when voting is open */}
-          {canVote && isActive && (
-            <button
-              onClick={() => !isPending && setShowConfirm(true)}
-              disabled={isPending}
-              className="flex-shrink-0 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold transition-colors disabled:opacity-60 flex items-center gap-2 shadow-sm"
-            >
-              {isPending ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-              ) : 'Vote'}
-            </button>
-          )}
+          {/* Action slot — computed above */}
+          {actionSlot}
         </div>
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Confirmation Modal — unchanged */}
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
@@ -220,9 +223,9 @@ function CandidateCard({ name, votes, totalVotes, canVote, isActive, pollId }: C
                 onClick={handleConfirm}
                 className="px-5 py-2 text-sm font-bold rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-md transition-colors flex items-center gap-2 disabled:opacity-50"
               >
-                {isPending ? (
-                  <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />Signing...</>
-                ) : 'Confirm & Cast Vote'}
+                {isPending
+                  ? <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />Signing...</>
+                  : 'Confirm & Cast Vote'}
               </button>
             </div>
           </div>
@@ -231,8 +234,9 @@ function CandidateCard({ name, votes, totalVotes, canVote, isActive, pollId }: C
     </>
   )
 }
+
 /* ─────────────────────────────────────────────
-   ADD CANDIDATE FORM (same logic, better layout)
+   ADD CANDIDATE FORM — unchanged from original
 ───────────────────────────────────────────── */
 function AddCandidateForm({ pollId, pollStart }: { pollId: number; pollStart: number }) {
   const { publicKey } = useWallet()
@@ -294,11 +298,167 @@ function AddCandidateForm({ pollId, pollStart }: { pollId: number; pollStart: nu
 }
 
 /* ─────────────────────────────────────────────
+   NEW: REGISTER VOTER FORM
+   
+   CONCEPT: Mirrors AddCandidateForm exactly.
+   - Only rendered when canCreate is true (poll creator)
+   - Locked once voting starts (same rule as candidates)
+   - Takes a wallet address string → converts to PublicKey → calls useRegisterVoter
+   
+   WHY lock it when voting starts?
+   If you could add voters mid-vote, you could unfairly add wallets
+   that you control right before they vote — undermining the integrity.
+───────────────────────────────────────────── */
+function RegisterVoterForm({ pollId, pollStart }: { pollId: number; pollStart: number }) {
+  const { publicKey } = useWallet()
+  const mutation = useRegisterVoter()
+  const [walletInput, setWalletInput] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+  const isStarted = Date.now() >= pollStart
+
+  if (isStarted) {
+    return (
+      <p className="text-xs text-amber-500 italic flex items-center gap-1.5">
+        <Timer className="h-3.5 w-3.5" />
+        Voting window open — voter registration is locked.
+      </p>
+    )
+  }
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrorMsg('')
+    if (!publicKey || !walletInput.trim()) return
+
+    // Validate that the input is a real Solana public key before sending tx
+    // PublicKey constructor throws if the string is invalid
+    let voterKey: PublicKey
+    try {
+      voterKey = new PublicKey(walletInput.trim())
+    } catch {
+      setErrorMsg('Invalid Solana wallet address. Please double-check.')
+      return
+    }
+
+    mutation.mutate(
+      { pollId, voterWallet: voterKey, signer: publicKey },
+      {
+        onSuccess: () => setWalletInput(''),
+        onError: (err: any) => setErrorMsg(err?.message || 'Failed to register voter.'),
+      },
+    )
+  }
+
+  return (
+    <form onSubmit={handleRegister} className="space-y-2">
+      <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+        Register Voter Wallet
+      </label>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <UserCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            required
+            placeholder="Voter wallet address (e.g., GpUME...)"
+            value={walletInput}
+            onChange={(e) => setWalletInput(e.target.value)}
+            disabled={mutation.isPending}
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl outline-none text-sm focus:ring-2 focus:ring-violet-500 font-mono"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={mutation.isPending || !walletInput.trim()}
+          className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-sm font-semibold flex items-center gap-1 disabled:opacity-50 transition-colors hover:bg-slate-700"
+        >
+          {mutation.isPending
+            ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+            : <><Plus className="h-4 w-4" />Add</>}
+        </button>
+      </div>
+      {errorMsg && <p className="text-xs font-medium text-red-500">{errorMsg}</p>}
+    </form>
+  )
+}
+
+/* ─────────────────────────────────────────────
+   NEW: REGISTERED VOTERS LIST
+   
+   Shows the creator a list of who they've registered.
+   Each row has a wallet address + registered date.
+   Only visible to the poll creator (canCreate gate).
+   
+   CONCEPT: This reads the RegisteredVoter PDAs filtered
+   by this poll — same memcmp filter pattern as useGetCandidates.
+───────────────────────────────────────────── */
+function RegisteredVotersList({ pollId }: { pollId: number }) {
+  const { data: voters = [], isLoading } = useGetRegisteredVoters({ pollId })
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+          <Users className="h-3.5 w-3.5" />
+          Registered Voters
+        </h3>
+        <span className="text-xs text-slate-400">
+          {voters.length} wallet{voters.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-12 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+          ))}
+        </div>
+      ) : voters.length === 0 ? (
+        <div className="text-center py-6 text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+          <Users className="h-6 w-6 mx-auto mb-1.5 opacity-30" />
+          <p className="text-xs">No voters registered yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {voters.map((v) => (
+            <div
+              key={v.voter}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
+            >
+              {/* Green checkmark — registered */}
+              <div className="h-7 w-7 rounded-full bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center flex-shrink-0">
+                <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
+              </div>
+
+              {/* Wallet address — truncated for display */}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono text-slate-700 dark:text-slate-300 truncate">
+                  {v.voter}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Registered {v.registeredAt}</p>
+              </div>
+
+              {/* 
+                OPTIONAL: Add a remove button here in the future.
+                Would call useDeregisterVoter (the on-chain close instruction).
+                Keeping it simple for now — just a visual indicator.
+              */}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────
    MAIN EXPORT: PollDetailPage
-   Props:
-     pollId   — numeric id from URL param
-     canVote  — from useWalletRole
-     canCreate — from useWalletRole
+   
+   CHANGES from original:
+   1. Fetches registeredVoters to check if current user is registered
+   2. Passes isRegisteredVoter down to CandidateCard
+   3. Renders RegisterVoterForm + RegisteredVotersList for canCreate users
+   4. Shows a "not registered" callout for voters who can't vote this poll
 ───────────────────────────────────────────── */
 export function PollDetailPage({
   pollId,
@@ -310,11 +470,26 @@ export function PollDetailPage({
   canCreate: boolean
 }) {
   const router = useRouter()
+  const { publicKey } = useWallet()
+
   const { data: allPolls = [], isLoading: pollsLoading } = useGetPolls()
   const poll = allPolls.find((p) => p.id === pollId)
-  const { data: candidates = [], isLoading: candidatesLoading } = useGetCandidates({ pollId })
-  const totalVotes = candidates.reduce((a, c) => a + c.votes, 0)
 
+  const { data: candidates = [], isLoading: candidatesLoading } = useGetCandidates({ pollId })
+
+  // Fetch the registered voters list for this poll
+  // We need this for TWO purposes:
+  //   1. Creator: display the list of registered wallets
+  //   2. Voter: check if the current user's wallet is in the list
+  const { data: registeredVoters = [] } = useGetRegisteredVoters({ pollId })
+
+  // Check if the currently connected wallet is registered for this specific poll
+  // CONCEPT: We do this on the client for UX — the on-chain program enforces it regardless
+  const isRegisteredVoter = publicKey
+    ? registeredVoters.some((v) => v.voter === publicKey.toString())
+    : false
+
+  const totalVotes = candidates.reduce((a, c) => a + c.votes, 0)
   const isActive   = poll?.status === 'active'
   const isUpcoming = poll?.status === 'upcoming'
 
@@ -337,7 +512,7 @@ export function PollDetailPage({
   }
 
   return (
-    <div className=" mx-auto px-4 py-10 space-y-8">
+    <div className="mx-auto px-4 py-10 space-y-8">
 
       {/* ── Back button ── */}
       <button
@@ -351,7 +526,6 @@ export function PollDetailPage({
       {/* ── Poll Header ── */}
       <div className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Status pill */}
           {poll.status === 'active' && (
             <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full
                              text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300
@@ -374,8 +548,6 @@ export function PollDetailPage({
               <XCircle className="h-3 w-3" />Ended
             </span>
           )}
-
-          {/* Explorer link */}
           <ExplorerLink
             path={`account/${poll.id}`}
             label="View on Explorer"
@@ -390,7 +562,6 @@ export function PollDetailPage({
           {poll.description}
         </p>
 
-        {/* Meta row */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-400 pt-1">
           <span>Poll ID <code className="font-mono ml-1">{poll.id}</code></span>
           <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
@@ -399,13 +570,19 @@ export function PollDetailPage({
           <span>Ends {new Date(poll.end).toLocaleDateString()}</span>
           <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
           <span>{totalVotes} votes cast</span>
+          <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
+          {/* registeredVoters is already fetched above for the isRegisteredVoter check
+              so this is FREE — no extra network call, just .length on the same array */}
+          <span className="inline-flex items-center gap-1">
+            <Users className="h-3 w-3" />
+            {registeredVoters.length} registered
+          </span>
         </div>
       </div>
 
-      {/* ── Countdown / Progress Hero ── */}
+      {/* ── Countdown Hero ── */}
       <CountdownHero poll={poll} />
 
-      {/* ── Divider ── */}
       <div className="h-px bg-slate-100 dark:bg-slate-800" />
 
       {/* ── Candidates Section ── */}
@@ -441,12 +618,13 @@ export function PollDetailPage({
                 pollId={poll.id}
                 canVote={canVote}
                 isActive={isActive && Date.now() >= poll.start}
+                isRegisteredVoter={isRegisteredVoter}   // ← NEW: pass registration status
               />
             ))}
           </div>
         )}
 
-        {/* ── Add Candidate (only for creators, before poll starts) ── */}
+        {/* ── Add Candidate — only for poll creators ── */}
         {canCreate && (
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
             <AddCandidateForm pollId={poll.id} pollStart={poll.start} />
@@ -454,8 +632,55 @@ export function PollDetailPage({
         )}
       </section>
 
-      {/* ── Voter info callout ── */}
-      {canVote && isActive && (
+      {/* ─────────────────────────────────────────────
+          VOTER REGISTRATION SECTION
+          
+          Visible ONLY to poll creators (canCreate).
+          Regular voters never see this section — same
+          pattern as AddCandidateForm being hidden from voters.
+          
+          Divided into:
+            - RegisterVoterForm: input to add a new wallet
+            - RegisteredVotersList: shows all registered wallets
+      ───────────────────────────────────────────── */}
+      {canCreate && (
+        <section className="space-y-5 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-slate-400" />
+            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400">
+              Voter Management
+            </h2>
+          </div>
+
+          {/* Explain why this exists — helps you understand the concept too */}
+          <div className="px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+            <strong>How it works:</strong> Each registered wallet gets a{' '}
+            <code className="bg-blue-100 dark:bg-blue-900 px-1 py-0.5 rounded">RegisteredVoter</code> PDA
+            on-chain. When they try to vote, Solana checks that PDA exists — if it doesn't,
+            the transaction is rejected automatically before any code runs.
+          </div>
+
+          {/* Add voter form */}
+          <RegisterVoterForm pollId={poll.id} pollStart={poll.start} />
+
+          {/* List of already-registered voters */}
+          <RegisteredVotersList pollId={poll.id} />
+        </section>
+      )}
+
+      {/* ─────────────────────────────────────────────
+          STATUS CALLOUTS — shown at the bottom
+          
+          Three cases:
+          1. Active + registered voter → green "one vote" callout (original)
+          2. Active + NOT registered voter → amber "not registered" callout (NEW)
+          3. Upcoming → "come back when voting opens" (NEW)
+          
+          canCreate users (creators/admins) see none of these — they manage, don't vote.
+      ───────────────────────────────────────────── */}
+
+      {/* Case 1: Registered voter, voting is open */}
+      {canVote && isActive && isRegisteredVoter && (
         <div className="rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900 px-5 py-4 text-sm text-violet-700 dark:text-violet-300">
           <p className="font-semibold mb-0.5 flex items-center gap-2">
             <ShieldCheck className="h-4 w-4" />
@@ -464,6 +689,33 @@ export function PollDetailPage({
           <p className="text-xs text-violet-600/70 dark:text-violet-400/70">
             Solana creates a <code>VoteRecord</code> PDA tied to your wallet + this poll.
             Voting twice would fail because that account already exists.
+          </p>
+        </div>
+      )}
+
+      {/* Case 2: Voter role but NOT registered for this poll */}
+      {canVote && isActive && !isRegisteredVoter && (
+        <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 px-5 py-4 text-sm text-amber-700 dark:text-amber-300">
+          <p className="font-semibold mb-0.5 flex items-center gap-2">
+            <UserX className="h-4 w-4" />
+            Your wallet is not registered for this poll
+          </p>
+          <p className="text-xs text-amber-600/70 dark:text-amber-400/70">
+            The poll creator must register your wallet address before you can vote.
+            Contact them with your wallet address to be added.
+          </p>
+        </div>
+      )}
+
+      {/* Case 3: Upcoming poll — tell voter to wait */}
+      {canVote && isUpcoming && (
+        <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-5 py-4 text-sm text-slate-600 dark:text-slate-300">
+          <p className="font-semibold mb-0.5 flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Voting hasn't opened yet
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Come back when the poll goes live. Your registration will be checked at that point.
           </p>
         </div>
       )}
