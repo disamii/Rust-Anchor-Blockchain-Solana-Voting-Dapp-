@@ -10,7 +10,7 @@ import { ellipsify } from '@/lib/utils'
 import { CopyIcon } from 'lucide-react'
 
 import { IdCard as IdentificationIcon, History as HistoryIcon, ShieldCheck as ShieldCheckIcon } from 'lucide-react'
-import RoleDashboard from './account-tabs'
+import RoleDashboard from './txn-ui'
 export default function AccountDetailFeature() {
   const params = useParams()
 
@@ -66,6 +66,7 @@ export default function AccountDetailFeature() {
       </AppHero>
 
        <RoleDashboard address={address} />
+       
 
     </div>
   )

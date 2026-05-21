@@ -1,8 +1,8 @@
-'use client'   // ← ADD THIS as line 1
+'use client'  
 
 import { ConnectWalletGate } from '@/components/account/account'
 import { useWalletRole } from '@/components/account/account-data-access'
-import { PollListPage } from '@/components/account/poll'
+import { PollListPage } from '@/components/poll/poll'
 import { useWallet } from '@solana/wallet-adapter-react'
 
 export default function PollsPage() {
@@ -11,6 +11,6 @@ export default function PollsPage() {
       return <ConnectWalletGate/>
     }
   const { data: role } = useWalletRole({ address: publicKey })
-  return <PollListPage canVote={role !== 'superadmin'} canCreate={role === 'admin'} />
+  return <PollListPage canVote={role !== 'superadmin'} canCreate={role === 'institution_admin'} />
 }
 

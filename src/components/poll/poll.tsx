@@ -3,42 +3,52 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  BarChart2, CheckCircle2, Timer, XCircle,
-  PlusCircle, X, ArrowRight, ShieldCheck,
-  Users, UserCheck, UserX,
+  BarChart2,
+  CheckCircle2,
+  Timer,
+  XCircle,
+  PlusCircle,
+  X,
+  ArrowRight,
+  ShieldCheck,
+  Users,
+  UserCheck,
+  UserX,
 } from 'lucide-react'
 import { useWallet } from '@solana/wallet-adapter-react'
-import {
-  useGetCandidates,
-  useInitializePoll,
-  useGetPolls,
-  useGetRegisteredVoters,   // ← NEW hook
-} from '@/components/account/account-data-access'
+import {} from // ← NEW hook
+'@/components/account/account-data-access'
 import { Poll } from '@/components/interface'
-
+import { useGetCandidates, useInitializePoll, useGetPolls, useGetRegisteredVoters } from './poll-data-access'
+import { PublicKey } from '@solana/web3.js'
+import { useGetMyInstitutions } from '../institution/institution-data-access'
 
 function StatusBadge({ status }: { status: Poll['status'] }) {
   const map = {
     active: {
       icon: <CheckCircle2 className="h-3 w-3" />,
       label: 'Live',
-      className: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800',
+      className:
+        'text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800',
     },
     upcoming: {
       icon: <Timer className="h-3 w-3" />,
       label: 'Upcoming',
-      className: 'text-violet-700 bg-violet-50 dark:bg-violet-950 dark:text-violet-300 ring-1 ring-violet-200 dark:ring-violet-800',
+      className:
+        'text-violet-700 bg-violet-50 dark:bg-violet-950 dark:text-violet-300 ring-1 ring-violet-200 dark:ring-violet-800',
     },
     ended: {
       icon: <XCircle className="h-3 w-3" />,
       label: 'Ended',
-      className: 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-slate-700',
+      className:
+        'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-slate-700',
     },
   }
   const { icon, label, className } = map[status]
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${className}`}>
-      {icon}{label}
+      {icon}
+      {label}
     </span>
   )
 }
@@ -140,7 +150,7 @@ function PollRow({
   const { data: candidates = [] } = useGetCandidates({ pollId: poll.id })
   const totalVotes = candidates.reduce((a, c) => a + c.votes, 0)
 
-  const isActive   = poll.status === 'active'
+  const isActive = poll.status === 'active'
   const isUpcoming = poll.status === 'upcoming'
   // Only show registration info when the poll is still relevant (not ended)
   const showRegistration = isActive || isUpcoming
@@ -165,15 +175,15 @@ function PollRow({
       {/* Main content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3 flex-wrap mb-1.5">
-          <span className="font-semibold text-base text-slate-900 dark:text-slate-100 truncate">
-            {poll.title}
-          </span>
+          <span className="font-semibold text-base text-slate-900 dark:text-slate-100 truncate">{poll.title}</span>
           <StatusBadge status={poll.status} />
         </div>
-
-        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">
-          {poll.description}
-        </p>
+        {poll.institution && (
+          <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+            {poll.institution}
+          </span>
+        )}
+        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{poll.description}</p>
 
         {/* 
           Meta row — the registration pill slots in naturally
@@ -191,11 +201,7 @@ function PollRow({
           {showRegistration && (
             <>
               <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
-              <VoterRegistrationPill
-                pollId={poll.id}
-                canCreate={canCreate}
-                canVote={canVote}
-              />
+              <VoterRegistrationPill pollId={poll.id} canCreate={canCreate} canVote={canVote} />
             </>
           )}
 
@@ -209,10 +215,12 @@ function PollRow({
       </div>
 
       {/* Right arrow — animates on hover */}
-      <div className="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center
+      <div
+        className="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center
                       bg-slate-100 dark:bg-slate-800
                       group-hover:bg-violet-600 group-hover:text-white
-                      text-slate-400 transition-all duration-200">
+                      text-slate-400 transition-all duration-200"
+      >
         <ArrowRight className="h-4 w-4" />
       </div>
     </button>
@@ -229,24 +237,48 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  const { data: institutions = [] } = useGetMyInstitutions({
+    adminWallet: publicKey,
+  })
 
+  const [selectedInstitutionId, setSelectedInstitutionId] = useState<number | null>(null)
   if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg('')
-    if (!publicKey) { setErrorMsg('Wallet connection required.'); return }
-
+    if (!publicKey) {
+      setErrorMsg('Wallet connection required.')
+      return
+    }
+    if (!selectedInstitutionId) {
+      setErrorMsg('Please select an institution')
+      return
+    }
     const startUnix = Math.floor(new Date(startDate).getTime() / 1000)
-    const endUnix   = Math.floor(new Date(endDate).getTime() / 1000)
-    if (endUnix <= startUnix) { setErrorMsg('End time must be after start time.'); return }
+    const endUnix = Math.floor(new Date(endDate).getTime() / 1000)
+    if (endUnix <= startUnix) {
+      setErrorMsg('End time must be after start time.')
+      return
+    }
 
     const randomPollId = Math.floor(Math.random() * 1_000_000)
-
     mutation.mutate(
-      { pollId: randomPollId, description: description.trim(), pollStart: startUnix, pollEnd: endUnix, signer: publicKey },
       {
-        onSuccess: () => { setDescription(''); setStartDate(''); setEndDate(''); onClose() },
+        pollId: randomPollId,
+        institutionId: selectedInstitutionId,
+        description: description.trim(),
+        pollStart: startUnix,
+        pollEnd: endUnix,
+        signer: publicKey,
+      },
+      {
+        onSuccess: () => {
+          setDescription('')
+          setStartDate('')
+          setEndDate('')
+          onClose()
+        },
         onError: (err: any) => setErrorMsg(err?.message || 'Transaction failed. Are you an Approved Creator?'),
       },
     )
@@ -271,9 +303,12 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
               Proposal / Description
             </label>
             <textarea
-              required rows={3} maxLength={280}
+              required
+              rows={3}
+              maxLength={280}
               placeholder="What should the DAO vote on?"
-              value={description} onChange={(e) => setDescription(e.target.value)}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
               disabled={mutation.isPending}
               className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none text-sm resize-none"
             />
@@ -283,13 +318,16 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           <div className="grid grid-cols-2 gap-4">
             {[
               { label: 'Start Window', value: startDate, onChange: setStartDate },
-              { label: 'End Window',   value: endDate,   onChange: setEndDate   },
+              { label: 'End Window', value: endDate, onChange: setEndDate },
             ].map(({ label, value, onChange }) => (
               <div key={label}>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">{label}</label>
                 <input
-                  type="datetime-local" required value={value}
-                  onChange={(e) => onChange(e.target.value)} disabled={mutation.isPending}
+                  type="datetime-local"
+                  required
+                  value={value}
+                  onChange={(e) => onChange(e.target.value)}
+                  disabled={mutation.isPending}
                   className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 text-sm outline-none"
                 />
               </div>
@@ -301,17 +339,46 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
               {errorMsg}
             </p>
           )}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Institution</label>
 
+            <select
+              value={selectedInstitutionId ?? ''}
+              onChange={(e) => setSelectedInstitutionId(Number(e.target.value))}
+              disabled={mutation.isPending}
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm"
+            >
+              <option value="">Select institution</option>
+
+              {institutions.map((inst) => (
+                <option key={inst.publicKey} value={inst.institutionId}>
+                  {inst.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} disabled={mutation.isPending}
-              className="px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={mutation.isPending}
+              className="px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+            >
               Cancel
             </button>
-            <button type="submit" disabled={mutation.isPending}
-              className="px-5 py-2.5 text-sm font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:bg-violet-400 rounded-xl flex items-center gap-2 shadow-sm transition-colors">
-              {mutation.isPending
-                ? <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />Broadcasting...</>
-                : 'Initialize Poll'}
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              className="px-5 py-2.5 text-sm font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:bg-violet-400 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+            >
+              {mutation.isPending ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                  Broadcasting...
+                </>
+              ) : (
+                'Initialize Poll'
+              )}
             </button>
           </div>
         </form>
@@ -345,10 +412,10 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
   const router = useRouter()
   const { data: polls = [], isLoading } = useGetPolls()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-
-  const active   = polls.filter((p) => p.status === 'active')
+  console.log(polls)
+  const active = polls.filter((p) => p.status === 'active')
   const upcoming = polls.filter((p) => p.status === 'upcoming')
-  const ended    = polls.filter((p) => p.status === 'ended')
+  const ended = polls.filter((p) => p.status === 'ended')
 
   const handlePollClick = (poll: Poll) => {
     router.push(`/polls/${poll.id}`)
@@ -364,13 +431,10 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
 
   return (
     <div className="mx-auto px-4 py-10 space-y-10">
-
       {/* ── Page Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-            Governance Polls
-          </h1>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Governance Polls</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1.5 text-sm">
             {polls.length} proposal{polls.length !== 1 ? 's' : ''} on-chain
             {canCreate && (
@@ -412,13 +476,7 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
           />
           <div className="space-y-3">
             {active.map((p) => (
-              <PollRow
-                key={p.id}
-                poll={p}
-                onClick={() => handlePollClick(p)}
-                canCreate={canCreate}
-                canVote={canVote}
-              />
+              <PollRow key={p.id} poll={p} onClick={() => handlePollClick(p)} canCreate={canCreate} canVote={canVote} />
             ))}
           </div>
         </section>
@@ -434,13 +492,7 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
           />
           <div className="space-y-3">
             {upcoming.map((p) => (
-              <PollRow
-                key={p.id}
-                poll={p}
-                onClick={() => handlePollClick(p)}
-                canCreate={canCreate}
-                canVote={canVote}
-              />
+              <PollRow key={p.id} poll={p} onClick={() => handlePollClick(p)} canCreate={canCreate} canVote={canVote} />
             ))}
           </div>
         </section>
@@ -456,13 +508,7 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
           />
           <div className="space-y-3">
             {ended.map((p) => (
-              <PollRow
-                key={p.id}
-                poll={p}
-                onClick={() => handlePollClick(p)}
-                canCreate={canCreate}
-                canVote={canVote}
-              />
+              <PollRow key={p.id} poll={p} onClick={() => handlePollClick(p)} canCreate={canCreate} canVote={canVote} />
             ))}
           </div>
         </section>

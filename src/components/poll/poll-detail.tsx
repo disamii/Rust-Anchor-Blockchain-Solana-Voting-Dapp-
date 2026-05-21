@@ -3,23 +3,33 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, CheckCircle2, Timer, XCircle, Clock,
-  User, Plus, ShieldCheck, Trash2, Users, UserCheck, UserX,
+  ArrowLeft,
+  CheckCircle2,
+  Timer,
+  XCircle,
+  Clock,
+  User,
+  Plus,
+  ShieldCheck,
+  Users,
+  UserCheck,
+  UserX,
+  Building2,
 } from 'lucide-react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey } from '@solana/web3.js'
 
 import { formatCountdown } from '@/lib/utils'
+import { ExplorerLink } from '@/components/cluster/cluster-ui'
+import { Poll } from '@/components/interface'
 import {
-  useCastVote,
   useInitializeCandidate,
   useGetPolls,
   useGetCandidates,
-  useRegisterVoter,         // ← NEW hook (add to account-data-access)
-  useGetRegisteredVoters,   // ← NEW hook (add to account-data-access)
-} from '@/components/account/account-data-access'
-import { ExplorerLink } from '@/components/cluster/cluster-ui'
-import { Poll } from '@/components/interface'
+  useCastVote,
+  useGetRegisteredVoters,
+  useRegisterVoter,
+} from './poll-data-access'
 
 /* ─────────────────────────────────────────────
    HELPERS
@@ -31,7 +41,7 @@ function pollProgress(poll: Poll): number {
 }
 
 /* ─────────────────────────────────────────────
-   COUNTDOWN HERO — unchanged from original
+   COUNTDOWN HERO
 ───────────────────────────────────────────── */
 function CountdownHero({ poll }: { poll: Poll }) {
   const [, tick] = useState(0)
@@ -93,13 +103,6 @@ function CountdownHero({ poll }: { poll: Poll }) {
 
 /* ─────────────────────────────────────────────
    CANDIDATE CARD
-   
-   NEW: receives `isRegisteredVoter` prop
-   - If voting is open AND user is NOT registered → show "Not Registered" badge instead of Vote button
-   - If voting is open AND user IS registered → show Vote button as before
-   
-   WHY: The on-chain program will reject the tx anyway if not registered,
-   but we give clear UI feedback so the user isn't confused by a failed tx.
 ───────────────────────────────────────────── */
 interface CandidateCardProps {
   name: string
@@ -108,11 +111,19 @@ interface CandidateCardProps {
   canVote: boolean
   isActive: boolean
   pollId: number
-  isRegisteredVoter: boolean   // ← NEW PROP
+  institutionId: number
+  isRegisteredVoter: boolean
 }
 
 function CandidateCard({
-  name, votes, totalVotes, canVote, isActive, pollId, isRegisteredVoter
+  name,
+  votes,
+  totalVotes,
+  canVote,
+  isActive,
+  pollId,
+  institutionId,
+  isRegisteredVoter,
 }: CandidateCardProps) {
   const { publicKey } = useWallet()
   const castVoteMutation = useCastVote({ pollId })
@@ -124,7 +135,11 @@ function CandidateCard({
   const handleConfirm = async () => {
     if (!publicKey) return
     try {
-      await castVoteMutation.mutateAsync({ candidateName: name, signer: publicKey })
+      await castVoteMutation.mutateAsync({
+        candidateName: name,
+        signer: publicKey,
+        institutionId,
+      })
     } catch (e) {
       console.error('Vote failed:', e)
     } finally {
@@ -132,36 +147,24 @@ function CandidateCard({
     }
   }
 
-  // Decide what to show in the right slot of the card
-  // CONCEPT: We compute this once and render it below — keeps JSX clean
   const actionSlot = (() => {
-    if (!isActive) return null                    // poll not active, show nothing
-
-    if (!canVote) return null                     // superadmin / creator role, show nothing
-
+    if (!isActive) return null
+    if (!canVote) return null
     if (!isRegisteredVoter) {
-      // Voter role but NOT registered for this specific poll
       return (
-        <span className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl
-                         bg-slate-100 dark:bg-slate-800 text-slate-400 text-xs font-medium">
+        <span className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 text-xs font-medium">
           <UserX className="h-3.5 w-3.5" />
           Not registered
         </span>
       )
     }
-
-    // Registered voter — show the vote button
     return (
       <button
         onClick={() => !isPending && setShowConfirm(true)}
         disabled={isPending}
-        className="flex-shrink-0 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700
-                   text-white text-sm font-bold transition-colors disabled:opacity-60
-                   flex items-center gap-2 shadow-sm"
+        className="flex-shrink-0 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold transition-colors disabled:opacity-60 flex items-center gap-2 shadow-sm"
       >
-        {isPending
-          ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-          : 'Vote'}
+        {isPending ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : 'Vote'}
       </button>
     )
   })()
@@ -170,12 +173,9 @@ function CandidateCard({
     <>
       <div className="relative overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
         <div className="px-5 py-4 flex items-center gap-4">
-          {/* Avatar */}
           <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
             <User className="h-5 w-5 text-slate-400" />
           </div>
-
-          {/* Name + progress bar */}
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">{name}</p>
             <div className="flex items-center gap-3 mt-2">
@@ -190,13 +190,10 @@ function CandidateCard({
               </span>
             </div>
           </div>
-
-          {/* Action slot — computed above */}
           {actionSlot}
         </div>
       </div>
 
-      {/* Confirmation Modal — unchanged */}
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
@@ -206,9 +203,9 @@ function CandidateCard({
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Confirm Your Vote</h3>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               You're about to cast a blockchain vote for{' '}
-              <strong className="text-violet-600 dark:text-violet-400">"{name}"</strong>.
-              This creates a <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">VoteRecord</code> PDA
-              on-chain — it cannot be undone or changed.
+              <strong className="text-violet-600 dark:text-violet-400">"{name}"</strong>. This creates a{' '}
+              <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">VoteRecord</code> PDA
+              on-chain.
             </p>
             <div className="flex justify-end gap-3 pt-1">
               <button
@@ -223,9 +220,14 @@ function CandidateCard({
                 onClick={handleConfirm}
                 className="px-5 py-2 text-sm font-bold rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-md transition-colors flex items-center gap-2 disabled:opacity-50"
               >
-                {isPending
-                  ? <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />Signing...</>
-                  : 'Confirm & Cast Vote'}
+                {isPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
+                    Signing...
+                  </>
+                ) : (
+                  'Confirm & Cast Vote'
+                )}
               </button>
             </div>
           </div>
@@ -236,9 +238,15 @@ function CandidateCard({
 }
 
 /* ─────────────────────────────────────────────
-   ADD CANDIDATE FORM — unchanged from original
+   ADD CANDIDATE FORM
 ───────────────────────────────────────────── */
-function AddCandidateForm({ pollId, pollStart }: { pollId: number; pollStart: number }) {
+interface AddCandidateFormProps {
+  pollId: number
+  pollStart: number
+  institutionPublicKey: PublicKey
+}
+
+function AddCandidateForm({ pollId, pollStart, institutionPublicKey }: AddCandidateFormProps) {
   const { publicKey } = useWallet()
   const mutation = useInitializeCandidate()
   const [name, setName] = useState('')
@@ -259,7 +267,12 @@ function AddCandidateForm({ pollId, pollStart }: { pollId: number; pollStart: nu
     setErrorMsg('')
     if (!publicKey || !name.trim()) return
     mutation.mutate(
-      { pollId, candidateName: name.trim(), signer: publicKey },
+      {
+        pollId,
+        candidateName: name.trim(),
+        signer: publicKey,
+        institution: institutionPublicKey,
+      },
       {
         onSuccess: () => setName(''),
         onError: (err: any) => setErrorMsg(err?.message || 'Failed to add candidate.'),
@@ -269,27 +282,34 @@ function AddCandidateForm({ pollId, pollStart }: { pollId: number; pollStart: nu
 
   return (
     <form onSubmit={handleAdd} className="space-y-2">
-      <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-        Add Candidate / Option
-      </label>
+      <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Add Candidate / Option</label>
       <div className="flex gap-2">
         <div className="relative flex-1">
           <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
-            type="text" required maxLength={280}
+            type="text"
+            required
+            maxLength={280}
             placeholder="e.g., Yes, No, Alice"
-            value={name} onChange={(e) => setName(e.target.value)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             disabled={mutation.isPending}
             className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl outline-none text-sm focus:ring-2 focus:ring-violet-500"
           />
         </div>
         <button
-          type="submit" disabled={mutation.isPending || !name.trim()}
+          type="submit"
+          disabled={mutation.isPending || !name.trim()}
           className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-sm font-semibold flex items-center gap-1 disabled:opacity-50 transition-colors hover:bg-slate-700"
         >
-          {mutation.isPending
-            ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
-            : <><Plus className="h-4 w-4" />Add</>}
+          {mutation.isPending ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Add
+            </>
+          )}
         </button>
       </div>
       {errorMsg && <p className="text-xs font-medium text-red-500">{errorMsg}</p>}
@@ -298,18 +318,15 @@ function AddCandidateForm({ pollId, pollStart }: { pollId: number; pollStart: nu
 }
 
 /* ─────────────────────────────────────────────
-   NEW: REGISTER VOTER FORM
-   
-   CONCEPT: Mirrors AddCandidateForm exactly.
-   - Only rendered when canCreate is true (poll creator)
-   - Locked once voting starts (same rule as candidates)
-   - Takes a wallet address string → converts to PublicKey → calls useRegisterVoter
-   
-   WHY lock it when voting starts?
-   If you could add voters mid-vote, you could unfairly add wallets
-   that you control right before they vote — undermining the integrity.
+   REGISTER VOTER FORM
 ───────────────────────────────────────────── */
-function RegisterVoterForm({ pollId, pollStart }: { pollId: number; pollStart: number }) {
+interface RegisterVoterFormProps {
+  pollId: number
+  pollStart: number
+  institutionId: number
+}
+
+function RegisterVoterForm({ pollId, pollStart, institutionId }: RegisterVoterFormProps) {
   const { publicKey } = useWallet()
   const mutation = useRegisterVoter()
   const [walletInput, setWalletInput] = useState('')
@@ -330,8 +347,6 @@ function RegisterVoterForm({ pollId, pollStart }: { pollId: number; pollStart: n
     setErrorMsg('')
     if (!publicKey || !walletInput.trim()) return
 
-    // Validate that the input is a real Solana public key before sending tx
-    // PublicKey constructor throws if the string is invalid
     let voterKey: PublicKey
     try {
       voterKey = new PublicKey(walletInput.trim())
@@ -341,7 +356,7 @@ function RegisterVoterForm({ pollId, pollStart }: { pollId: number; pollStart: n
     }
 
     mutation.mutate(
-      { pollId, voterWallet: voterKey, signer: publicKey },
+      { pollId, institutionId, voterWallet: voterKey, signer: publicKey },
       {
         onSuccess: () => setWalletInput(''),
         onError: (err: any) => setErrorMsg(err?.message || 'Failed to register voter.'),
@@ -351,9 +366,7 @@ function RegisterVoterForm({ pollId, pollStart }: { pollId: number; pollStart: n
 
   return (
     <form onSubmit={handleRegister} className="space-y-2">
-      <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-        Register Voter Wallet
-      </label>
+      <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Register Voter Wallet</label>
       <div className="flex gap-2">
         <div className="relative flex-1">
           <UserCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -372,9 +385,14 @@ function RegisterVoterForm({ pollId, pollStart }: { pollId: number; pollStart: n
           disabled={mutation.isPending || !walletInput.trim()}
           className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-sm font-semibold flex items-center gap-1 disabled:opacity-50 transition-colors hover:bg-slate-700"
         >
-          {mutation.isPending
-            ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
-            : <><Plus className="h-4 w-4" />Add</>}
+          {mutation.isPending ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Add
+            </>
+          )}
         </button>
       </div>
       {errorMsg && <p className="text-xs font-medium text-red-500">{errorMsg}</p>}
@@ -383,18 +401,10 @@ function RegisterVoterForm({ pollId, pollStart }: { pollId: number; pollStart: n
 }
 
 /* ─────────────────────────────────────────────
-   NEW: REGISTERED VOTERS LIST
-   
-   Shows the creator a list of who they've registered.
-   Each row has a wallet address + registered date.
-   Only visible to the poll creator (canCreate gate).
-   
-   CONCEPT: This reads the RegisteredVoter PDAs filtered
-   by this poll — same memcmp filter pattern as useGetCandidates.
+   REGISTERED VOTERS LIST
 ───────────────────────────────────────────── */
-function RegisteredVotersList({ pollId }: { pollId: number }) {
-  const { data: voters = [], isLoading } = useGetRegisteredVoters({ pollId })
-
+function RegisteredVotersList({ pollId, institutionId }: { pollId: number; institutionId: number }) {
+  const { data: voters = [], isLoading } = useGetRegisteredVoters({ pollId, institutionId })
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -406,7 +416,6 @@ function RegisteredVotersList({ pollId }: { pollId: number }) {
           {voters.length} wallet{voters.length !== 1 ? 's' : ''}
         </span>
       </div>
-
       {isLoading ? (
         <div className="space-y-2">
           {[1, 2].map((i) => (
@@ -425,24 +434,13 @@ function RegisteredVotersList({ pollId }: { pollId: number }) {
               key={v.voter}
               className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
             >
-              {/* Green checkmark — registered */}
               <div className="h-7 w-7 rounded-full bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center flex-shrink-0">
                 <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
               </div>
-
-              {/* Wallet address — truncated for display */}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-mono text-slate-700 dark:text-slate-300 truncate">
-                  {v.voter}
-                </p>
+                <p className="text-xs font-mono text-slate-700 dark:text-slate-300 truncate">{v.voter}</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">Registered {v.registeredAt}</p>
               </div>
-
-              {/* 
-                OPTIONAL: Add a remove button here in the future.
-                Would call useDeregisterVoter (the on-chain close instruction).
-                Keeping it simple for now — just a visual indicator.
-              */}
             </div>
           ))}
         </div>
@@ -453,12 +451,6 @@ function RegisteredVotersList({ pollId }: { pollId: number }) {
 
 /* ─────────────────────────────────────────────
    MAIN EXPORT: PollDetailPage
-   
-   CHANGES from original:
-   1. Fetches registeredVoters to check if current user is registered
-   2. Passes isRegisteredVoter down to CandidateCard
-   3. Renders RegisterVoterForm + RegisteredVotersList for canCreate users
-   4. Shows a "not registered" callout for voters who can't vote this poll
 ───────────────────────────────────────────── */
 export function PollDetailPage({
   pollId,
@@ -475,23 +467,29 @@ export function PollDetailPage({
   const { data: allPolls = [], isLoading: pollsLoading } = useGetPolls()
   const poll = allPolls.find((p) => p.id === pollId)
 
-  const { data: candidates = [], isLoading: candidatesLoading } = useGetCandidates({ pollId })
+  const { data: candidates = [], isLoading: candidatesLoading } = useGetCandidates({
+    pollId,
+    institution: poll?.institution,
+  })
+  
+// In PollDetailPage, you already have poll.institutionId — use it:
+const { data: registeredVoters = [] } = useGetRegisteredVoters({ 
+  pollId, 
+  institutionId: poll?.institutionId ?? 0  // add this
+})
 
-  // Fetch the registered voters list for this poll
-  // We need this for TWO purposes:
-  //   1. Creator: display the list of registered wallets
-  //   2. Voter: check if the current user's wallet is in the list
-  const { data: registeredVoters = [] } = useGetRegisteredVoters({ pollId })
+// And in RegisteredVotersList, pass it down:
 
-  // Check if the currently connected wallet is registered for this specific poll
-  // CONCEPT: We do this on the client for UX — the on-chain program enforces it regardless
+
   const isRegisteredVoter = publicKey
     ? registeredVoters.some((v) => v.voter === publicKey.toString())
     : false
 
   const totalVotes = candidates.reduce((a, c) => a + c.votes, 0)
-  const isActive   = poll?.status === 'active'
+  const isActive = poll?.status === 'active'
   const isUpcoming = poll?.status === 'upcoming'
+
+  const institutionPublicKey = poll?.institution ? new PublicKey(poll.institution) : null
 
   if (pollsLoading) {
     return (
@@ -501,20 +499,20 @@ export function PollDetailPage({
     )
   }
 
-  if (!poll) {
+  if (!poll || !institutionPublicKey) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 text-center">
         <p className="text-slate-500 mb-4">Poll not found on-chain.</p>
-        <button onClick={() => router.back()}
-          className="text-sm text-violet-600 hover:underline">← Back to polls</button>
+        <button onClick={() => router.back()} className="text-sm text-violet-600 hover:underline">
+          ← Back to polls
+        </button>
       </div>
     )
   }
 
   return (
     <div className="mx-auto px-4 py-10 space-y-8">
-
-      {/* ── Back button ── */}
+      {/* Back */}
       <button
         onClick={() => router.back()}
         className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition-colors group"
@@ -523,31 +521,34 @@ export function PollDetailPage({
         All polls
       </button>
 
-      {/* ── Poll Header ── */}
+      {/* Poll Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           {poll.status === 'active' && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full
-                             text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300
-                             ring-1 ring-emerald-200 dark:ring-emerald-800">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Live
             </span>
           )}
           {poll.status === 'upcoming' && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full
-                             text-violet-700 bg-violet-50 dark:bg-violet-950 dark:text-violet-300
-                             ring-1 ring-violet-200 dark:ring-violet-800">
-              <Timer className="h-3 w-3" />Upcoming
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full text-violet-700 bg-violet-50 dark:bg-violet-950 dark:text-violet-300 ring-1 ring-violet-200 dark:ring-violet-800">
+              <Timer className="h-3 w-3" />
+              Upcoming
             </span>
           )}
           {poll.status === 'ended' && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full
-                             text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400
-                             ring-1 ring-slate-200 dark:ring-slate-700">
-              <XCircle className="h-3 w-3" />Ended
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-slate-700">
+              <XCircle className="h-3 w-3" />
+              Ended
             </span>
           )}
+          <div className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full text-slate-700 bg-slate-50 border border-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700">
+            <Building2 className="h-3 w-3 text-slate-400" />
+            <span className="text-slate-400 mr-0.5">Institution:</span>
+            <span className="font-mono max-w-[120px] truncate" title={poll.institution}>
+              {poll.institution}
+            </span>
+          </div>
           <ExplorerLink
             path={`account/${poll.id}`}
             label="View on Explorer"
@@ -555,12 +556,8 @@ export function PollDetailPage({
           />
         </div>
 
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-snug">
-          {poll.title}
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">
-          {poll.description}
-        </p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-snug">{poll.title}</h1>
+        <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{poll.description}</p>
 
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-400 pt-1">
           <span>Poll ID <code className="font-mono ml-1">{poll.id}</code></span>
@@ -571,8 +568,6 @@ export function PollDetailPage({
           <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
           <span>{totalVotes} votes cast</span>
           <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
-          {/* registeredVoters is already fetched above for the isRegisteredVoter check
-              so this is FREE — no extra network call, just .length on the same array */}
           <span className="inline-flex items-center gap-1">
             <Users className="h-3 w-3" />
             {registeredVoters.length} registered
@@ -580,17 +575,13 @@ export function PollDetailPage({
         </div>
       </div>
 
-      {/* ── Countdown Hero ── */}
       <CountdownHero poll={poll} />
-
       <div className="h-px bg-slate-100 dark:bg-slate-800" />
 
-      {/* ── Candidates Section ── */}
+      {/* Candidates */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400">
-            Candidates
-          </h2>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400">Candidates</h2>
           <span className="text-xs text-slate-400">
             {candidates.length} option{candidates.length !== 1 ? 's' : ''}
           </span>
@@ -616,70 +607,47 @@ export function PollDetailPage({
                 votes={c.votes}
                 totalVotes={totalVotes}
                 pollId={poll.id}
+                institutionId={poll.institutionId}
                 canVote={canVote}
                 isActive={isActive && Date.now() >= poll.start}
-                isRegisteredVoter={isRegisteredVoter}   // ← NEW: pass registration status
+                isRegisteredVoter={isRegisteredVoter}
               />
             ))}
           </div>
         )}
 
-        {/* ── Add Candidate — only for poll creators ── */}
         {canCreate && (
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-            <AddCandidateForm pollId={poll.id} pollStart={poll.start} />
+            <AddCandidateForm
+              pollId={poll.id}
+              pollStart={poll.start}
+              institutionPublicKey={institutionPublicKey}
+            />
           </div>
         )}
       </section>
 
-      {/* ─────────────────────────────────────────────
-          VOTER REGISTRATION SECTION
-          
-          Visible ONLY to poll creators (canCreate).
-          Regular voters never see this section — same
-          pattern as AddCandidateForm being hidden from voters.
-          
-          Divided into:
-            - RegisterVoterForm: input to add a new wallet
-            - RegisteredVotersList: shows all registered wallets
-      ───────────────────────────────────────────── */}
+      {/* Voter Management */}
       {canCreate && (
         <section className="space-y-5 pt-2 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-slate-400" />
-            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400">
-              Voter Management
-            </h2>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400">Voter Management</h2>
           </div>
-
-          {/* Explain why this exists — helps you understand the concept too */}
           <div className="px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
             <strong>How it works:</strong> Each registered wallet gets a{' '}
-            <code className="bg-blue-100 dark:bg-blue-900 px-1 py-0.5 rounded">RegisteredVoter</code> PDA
-            on-chain. When they try to vote, Solana checks that PDA exists — if it doesn't,
-            the transaction is rejected automatically before any code runs.
+            <code className="bg-blue-100 dark:bg-blue-900 px-1 py-0.5 rounded">RegisteredVoter</code> PDA on-chain.
           </div>
-
-          {/* Add voter form */}
-          <RegisterVoterForm pollId={poll.id} pollStart={poll.start} />
-
-          {/* List of already-registered voters */}
-          <RegisteredVotersList pollId={poll.id} />
+          <RegisterVoterForm
+            pollId={poll.id}
+            pollStart={poll.start}
+            institutionId={poll.institutionId}
+          />
+<RegisteredVotersList pollId={poll.id} institutionId={poll.institutionId} />
         </section>
       )}
 
-      {/* ─────────────────────────────────────────────
-          STATUS CALLOUTS — shown at the bottom
-          
-          Three cases:
-          1. Active + registered voter → green "one vote" callout (original)
-          2. Active + NOT registered voter → amber "not registered" callout (NEW)
-          3. Upcoming → "come back when voting opens" (NEW)
-          
-          canCreate users (creators/admins) see none of these — they manage, don't vote.
-      ───────────────────────────────────────────── */}
-
-      {/* Case 1: Registered voter, voting is open */}
+      {/* Status callouts */}
       {canVote && isActive && isRegisteredVoter && (
         <div className="rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900 px-5 py-4 text-sm text-violet-700 dark:text-violet-300">
           <p className="font-semibold mb-0.5 flex items-center gap-2">
@@ -688,12 +656,10 @@ export function PollDetailPage({
           </p>
           <p className="text-xs text-violet-600/70 dark:text-violet-400/70">
             Solana creates a <code>VoteRecord</code> PDA tied to your wallet + this poll.
-            Voting twice would fail because that account already exists.
           </p>
         </div>
       )}
 
-      {/* Case 2: Voter role but NOT registered for this poll */}
       {canVote && isActive && !isRegisteredVoter && (
         <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 px-5 py-4 text-sm text-amber-700 dark:text-amber-300">
           <p className="font-semibold mb-0.5 flex items-center gap-2">
@@ -701,13 +667,11 @@ export function PollDetailPage({
             Your wallet is not registered for this poll
           </p>
           <p className="text-xs text-amber-600/70 dark:text-amber-400/70">
-            The poll creator must register your wallet address before you can vote.
-            Contact them with your wallet address to be added.
+            Contact the institution administrator with your wallet address to be added.
           </p>
         </div>
       )}
 
-      {/* Case 3: Upcoming poll — tell voter to wait */}
       {canVote && isUpcoming && (
         <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-5 py-4 text-sm text-slate-600 dark:text-slate-300">
           <p className="font-semibold mb-0.5 flex items-center gap-2">
