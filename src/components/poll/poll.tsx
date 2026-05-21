@@ -55,20 +55,6 @@ function StatusBadge({ status }: { status: Poll['status'] }) {
 
 /* ─────────────────────────────────────────────
    VOTER REGISTRATION PILL
-   
-   CONCEPT: Shows the voter's registration status
-   for THIS specific poll, right in the list row.
-   
-   Three states:
-   - canCreate (poll creator/admin): shows total count with Users icon
-     → They care about "how many people can vote?"
-   - canVote + registered: green "Registered" pill
-     → Reassures voter they can vote when it opens
-   - canVote + NOT registered: amber "Not registered" pill
-     → Signals they need to contact the creator
-   
-   We show this ONLY for active/upcoming polls because
-   ended polls don't need this info anymore.
 ───────────────────────────────────────────── */
 function VoterRegistrationPill({
   pollId,
@@ -83,12 +69,9 @@ function VoterRegistrationPill({
   const { data: registeredVoters = [], isLoading } = useGetRegisteredVoters({ pollId })
 
   if (isLoading) {
-    // Small skeleton while loading — avoids layout shift
     return <span className="w-20 h-4 rounded-full bg-slate-100 dark:bg-slate-800 animate-pulse inline-block" />
   }
 
-  // Poll creator view: just show the count
-  // They don't need to know if they're "registered" — they run the poll
   if (canCreate) {
     return (
       <span className="inline-flex items-center gap-1 text-slate-400">
@@ -98,7 +81,6 @@ function VoterRegistrationPill({
     )
   }
 
-  // Voter view: show personal registration status
   if (canVote && publicKey) {
     const isRegistered = registeredVoters.some((v) => v.voter === publicKey.toString())
 
@@ -119,7 +101,6 @@ function VoterRegistrationPill({
     )
   }
 
-  // Fallback: wallet not connected — show total count neutrally
   return (
     <span className="inline-flex items-center gap-1 text-slate-400">
       <Users className="h-3.5 w-3.5" />
@@ -129,12 +110,7 @@ function VoterRegistrationPill({
 }
 
 /* ─────────────────────────────────────────────
-   POLL ROW — one row per poll in the list
-   
-   CHANGES from original:
-   - Added VoterRegistrationPill to the meta row
-   - Pill is only shown for active/upcoming polls
-     (ended polls don't need registration info)
+   POLL ROW
 ───────────────────────────────────────────── */
 function PollRow({
   poll,
@@ -152,7 +128,6 @@ function PollRow({
 
   const isActive = poll.status === 'active'
   const isUpcoming = poll.status === 'upcoming'
-  // Only show registration info when the poll is still relevant (not ended)
   const showRegistration = isActive || isUpcoming
 
   return (
@@ -166,38 +141,29 @@ function PollRow({
                  hover:shadow-md hover:shadow-violet-500/5
                  transition-all duration-200"
     >
-      {/* Left accent bar — color reflects poll status */}
       <div
         className={`w-1 self-stretch rounded-full flex-shrink-0 transition-colors
           ${isActive ? 'bg-emerald-400' : isUpcoming ? 'bg-violet-400' : 'bg-slate-200 dark:bg-slate-700'}`}
       />
 
-      {/* Main content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3 flex-wrap mb-1.5">
+          {/* poll.title displays here automatically */}
           <span className="font-semibold text-base text-slate-900 dark:text-slate-100 truncate">{poll.title}</span>
           <StatusBadge status={poll.status} />
         </div>
         {poll.institution && (
-          <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+          <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md mb-1.5 inline-block">
             {poll.institution}
           </span>
         )}
         <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{poll.description}</p>
 
-        {/* 
-          Meta row — the registration pill slots in naturally
-          between votes cast and the date, just like another stat.
-          
-          The separator dots (w-px h-3) only appear between items
-          that both exist, keeping spacing clean.
-        */}
         <div className="flex items-center gap-4 mt-2.5 text-xs text-slate-400 flex-wrap">
           <span>{candidates.length} candidates</span>
           <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
           <span>{totalVotes} votes cast</span>
 
-          {/* Registration pill — only for active/upcoming polls */}
           {showRegistration && (
             <>
               <span className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
@@ -214,7 +180,6 @@ function PollRow({
         </div>
       </div>
 
-      {/* Right arrow — animates on hover */}
       <div
         className="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center
                       bg-slate-100 dark:bg-slate-800
@@ -228,11 +193,12 @@ function PollRow({
 }
 
 /* ─────────────────────────────────────────────
-   CREATE POLL MODAL — unchanged from original
+   CREATE POLL MODAL — Updated with Title Field
 ───────────────────────────────────────────── */
 function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { publicKey } = useWallet()
   const mutation = useInitializePoll()
+  const [title, setTitle] = useState('') // Added state for title
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -251,6 +217,10 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       setErrorMsg('Wallet connection required.')
       return
     }
+    if (!title.trim()) {
+      setErrorMsg('Please provide a poll title.')
+      return
+    }
     if (!selectedInstitutionId) {
       setErrorMsg('Please select an institution')
       return
@@ -267,6 +237,7 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       {
         pollId: randomPollId,
         institutionId: selectedInstitutionId,
+        title: title.trim(), // Sent title to mutation handler
         description: description.trim(),
         pollStart: startUnix,
         pollEnd: endUnix,
@@ -274,6 +245,7 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       },
       {
         onSuccess: () => {
+          setTitle('') // Reset fields on successful broadcast
           setDescription('')
           setStartDate('')
           setEndDate('')
@@ -298,6 +270,23 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* NEW: Poll Title input field */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Poll Title
+            </label>
+            <input
+              type="text"
+              required
+              maxLength={50}
+              placeholder="e.g., Q3 Budget Allocation"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={mutation.isPending}
+              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none text-sm"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
               Proposal / Description
@@ -339,17 +328,17 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
               {errorMsg}
             </p>
           )}
+
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Institution</label>
-
             <select
+              required
               value={selectedInstitutionId ?? ''}
               onChange={(e) => setSelectedInstitutionId(Number(e.target.value))}
               disabled={mutation.isPending}
-              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm"
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-violet-500"
             >
               <option value="">Select institution</option>
-
               {institutions.map((inst) => (
                 <option key={inst.publicKey} value={inst.institutionId}>
                   {inst.name}
@@ -357,6 +346,7 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
               ))}
             </select>
           </div>
+
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
@@ -388,7 +378,7 @@ function CreatePollModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 }
 
 /* ─────────────────────────────────────────────
-   SECTION HEADER — unchanged from original
+   SECTION HEADER
 ───────────────────────────────────────────── */
 function SectionHeader({ label, count, color }: { label: string; count: number; color: string }) {
   return (
@@ -402,11 +392,6 @@ function SectionHeader({ label, count, color }: { label: string; count: number; 
 
 /* ─────────────────────────────────────────────
    MAIN EXPORT: PollListPage
-   
-   CHANGES from original:
-   - canCreate and canVote are now forwarded to PollRow
-   - PollRow forwards them to VoterRegistrationPill
-   - Everything else is identical
 ───────────────────────────────────────────── */
 export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCreate: boolean }) {
   const router = useRouter()
@@ -431,7 +416,6 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
 
   return (
     <div className="mx-auto px-4 py-10 space-y-10">
-      {/* ── Page Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Governance Polls</h1>
@@ -457,7 +441,6 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
         )}
       </div>
 
-      {/* ── Empty state ── */}
       {polls.length === 0 && (
         <div className="text-center py-20 text-slate-400">
           <BarChart2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -466,7 +449,6 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
         </div>
       )}
 
-      {/* ── Active Polls ── */}
       {active.length > 0 && (
         <section>
           <SectionHeader
@@ -482,7 +464,6 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
         </section>
       )}
 
-      {/* ── Upcoming Polls ── */}
       {upcoming.length > 0 && (
         <section>
           <SectionHeader
@@ -498,7 +479,6 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
         </section>
       )}
 
-      {/* ── Ended Polls ── */}
       {ended.length > 0 && (
         <section>
           <SectionHeader
@@ -514,7 +494,6 @@ export function PollListPage({ canVote, canCreate }: { canVote: boolean; canCrea
         </section>
       )}
 
-      {/* ── Create Modal ── */}
       <CreatePollModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
     </div>
   )

@@ -35,8 +35,8 @@ export interface Poll {
   end: number
   candidateAmount: number
   authority: string
-  institution: string      // PDA pubkey string
-  institutionId: number    // ← ADD THIS
+  institution: string      
+  institutionId: number 
   status: 'upcoming' | 'active' | 'ended'
   candidates: Candidate[]
 }

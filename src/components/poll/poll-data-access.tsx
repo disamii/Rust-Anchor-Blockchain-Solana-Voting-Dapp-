@@ -37,7 +37,7 @@ export function useGetPolls() {
         // poll-data-access.tsx
         return {
           id: account.pollId.toNumber(),
-          title: `Poll #${account.pollId.toString()}`,
+          title: account.title,
           description: account.description,
           start,
           end,
@@ -62,6 +62,7 @@ export function useInitializePoll() {
     mutationFn: async (input: {
       pollId: number
       institutionId: number
+      title:string
       description: string
       pollStart: number
       pollEnd: number
@@ -71,6 +72,7 @@ export function useInitializePoll() {
         .initializePoll(
           new BN(input.pollId),
           new BN(input.institutionId),
+          input.title,
           input.description,
           new BN(input.pollStart),
           new BN(input.pollEnd),
@@ -199,12 +201,14 @@ export function useVotingProgram() {
     mutationFn: ({
       pollId,
       institutionId,
+      title,
       description,
       start,
       end,
     }: {
       pollId: number
       institutionId: number
+      title:string
       description: string
       start: number
       end: number
@@ -213,6 +217,7 @@ export function useVotingProgram() {
         .initializePoll(
           new anchor.BN(pollId),
           new anchor.BN(institutionId),
+          title,
           description,
           new anchor.BN(start),
           new anchor.BN(end),
