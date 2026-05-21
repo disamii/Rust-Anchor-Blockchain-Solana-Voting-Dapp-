@@ -14,9 +14,6 @@ declare_id!("CJQhZqq1X6EC2wE2sUYZAczqQSBvYs9DZGkrs8AQiRxB");
 pub mod voting {
     use super::*;
 
-    // -------------------------------------------------
-    // ADMIN
-    // -------------------------------------------------
 
     pub fn initialize_config(ctx: Context<InitializeConfig>) -> Result<()> {
         instructions::admin::initialize_config(ctx)
@@ -40,13 +37,13 @@ pub mod voting {
         ctx: Context<InitializeInstitution>,
         institution_id: u64,
         name: String,
-        treasury: Pubkey,
+        policy: String,
     ) -> Result<()> {
         instructions::institution::initialize_institution(
             ctx,
             institution_id,
             name,
-            treasury,
+            policy,
         )
     }
 
@@ -74,13 +71,13 @@ pub mod voting {
         ctx: Context<UpdateInstitution>,
         institution_id: u64,
         new_name: String,
-        new_treasury: Pubkey,
+        new_Policy: String,
     ) -> Result<()> {
         instructions::institution::update_institution(
             ctx,
             institution_id,
             new_name,
-            new_treasury,
+            new_Policy,
         )
     }
 

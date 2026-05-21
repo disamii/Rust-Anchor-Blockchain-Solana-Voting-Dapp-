@@ -12,7 +12,7 @@ pub fn initialize_institution(
     ctx: Context<InitializeInstitution>,
     institution_id: u64,
     name: String,
-    treasury: Pubkey,
+    policy: String,
 ) -> Result<()> {
 
     let admin = &mut ctx.accounts.admin;
@@ -29,7 +29,7 @@ pub fn initialize_institution(
     // institution owner
     institution.admin = ctx.accounts.admin_wallet.key();
 
-    institution.treasury = treasury;
+    institution.policy = policy;
 
     institution.created_at = Clock::get()?.unix_timestamp;
 
@@ -108,14 +108,14 @@ pub fn update_institution(
     ctx: Context<UpdateInstitution>,
     _institution_id: u64,
     new_name: String,
-    new_treasury: Pubkey,
+    new_Policy: String,
 ) -> Result<()> {
 
     let institution = &mut ctx.accounts.institution;
 
     institution.name = new_name;
 
-    institution.treasury = new_treasury;
+    institution.policy = new_Policy;
 
     msg!("Institution updated");
 

@@ -56,7 +56,7 @@ export function useInitializeInstitution() {
     mutationFn: async (input: {
       institutionId: number
       name: string
-      treasury: PublicKey
+      policy: string
       signer: PublicKey
       adminWallet: PublicKey
     }) => {
@@ -66,7 +66,7 @@ export function useInitializeInstitution() {
         .initializeInstitution(
           idBN,
           input.name,
-          input.treasury,
+          input.policy,
         )
         .accounts({
           signer: input.signer,
@@ -186,7 +186,7 @@ export function useUpdateInstitution() {
       institutionId: number
       signer: PublicKey
       newName: string
-      newTreasury: PublicKey
+      newPolicy: string
     }) => {
       const idBN = new BN(input.institutionId)
 
@@ -194,7 +194,7 @@ export function useUpdateInstitution() {
         .updateInstitution(
           idBN,
           input.newName,
-          input.newTreasury,
+          input.newPolicy,
         )
         .accounts({
           signer: input.signer,
@@ -270,7 +270,7 @@ export function useGetInstitutions() {
 
           admin: acc.admin.toString(),
 
-          treasury: acc.treasury.toString(),
+          policy: acc.policy.toString(),
 
           createdAt: new Date(
             acc.createdAt.toNumber() * 1000,
@@ -329,7 +329,7 @@ export function useGetMyInstitutions({ adminWallet }: { adminWallet: PublicKey |
             institutionId: acc.institutionId.toNumber(),
             name: acc.name,
             admin: acc.admin.toString(),
-            treasury: acc.treasury.toString(),
+            policy: acc.policy.toString(),
             createdAt: new Date(acc.createdAt.toNumber() * 1000).toISOString(),
             isActive: acc.isActive,
             isApproved: acc.isApproved,

@@ -19,7 +19,7 @@ export interface Institution {
   institutionId: number
   name: string
   admin: string
-  treasury: string
+  policy: string
   createdAt: string
   isActive: boolean
   isApproved: boolean

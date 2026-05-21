@@ -21,7 +21,8 @@ pub struct Institution {
     #[max_len(100)]
     pub name: String,
     pub admin: Pubkey,
-    pub treasury: Pubkey,
+    #[max_len(500)]
+    pub policy: String,
     pub created_at: i64,
     pub is_approved: bool,
     pub approved_by: Pubkey,

@@ -5,15 +5,18 @@ import { useState } from 'react'
 import { PublicKey } from '@solana/web3.js'
 import { useWallet } from '@solana/wallet-adapter-react'
 
-import { Building2, CheckCircle2, Clock3, ShieldCheck, Search, Plus, ArrowRight, X } from 'lucide-react'
+import { Building2, CheckCircle2, Clock3, ShieldCheck, Search, Plus, ArrowRight, X, Wallet } from 'lucide-react'
 
 import { useGetInstitutions, useInitializeInstitution } from './institution-data-access'
+import { WalletButton } from '../solana/solana-provider'
+// Import your WalletButton component here if it's a custom one,
+// or from @solana/wallet-adapter-react-ui
+// import { WalletMultiButton as WalletButton } from '@solana/wallet-adapter-react-ui'
 
 interface InstitutionSignupModalProps {
   isOpen: boolean
   onClose: () => void
 }
-
 
 export default function InstitutionsPage() {
   const { data: institutions = [], isLoading } = useGetInstitutions()
@@ -25,7 +28,7 @@ export default function InstitutionsPage() {
   const filtered = institutions.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+    <div className=" mx-auto px-6 py-8 space-y-8">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
         <div>
@@ -136,15 +139,14 @@ export default function InstitutionsPage() {
 function InstitutionSignupModal({ isOpen, onClose }: InstitutionSignupModalProps) {
   const { publicKey } = useWallet()
   const mutation = useInitializeInstitution()
-  const [institutionId, setInstitutionId] = useState('')
   const [name, setName] = useState('')
-  const [treasury, setTreasury] = useState('')
+  const [policy, setpolicy] = useState('')
   const [error, setError] = useState('')
+
   if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
     setError('')
 
     if (!publicKey) {
@@ -153,32 +155,28 @@ function InstitutionSignupModal({ isOpen, onClose }: InstitutionSignupModalProps
     }
 
     try {
-      const treasuryPk = new PublicKey(treasury.trim())
-
+      const institutionId = Math.floor(Math.random() * 1_000_000)
       mutation.mutate(
         {
-          institutionId: Number(institutionId),
+          institutionId: institutionId,
           name,
-          treasury: treasuryPk,
+          policy: policy.trim(),
           signer: publicKey,
           adminWallet: publicKey,
         },
         {
           onSuccess: () => {
             onClose()
-
-            setInstitutionId('')
             setName('')
-            setTreasury('')
+            setpolicy('')
           },
-
           onError: (err: any) => {
             setError(err?.message || 'Institution creation failed.')
           },
         },
       )
     } catch {
-      setError('Invalid treasury wallet.')
+      setError('Invalid policy wallet.')
     }
   }
 
@@ -189,7 +187,6 @@ function InstitutionSignupModal({ isOpen, onClose }: InstitutionSignupModalProps
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800">
           <div>
             <h2 className="text-xl font-semibold">Register Institution</h2>
-
             <p className="text-sm text-slate-500 mt-1">
               Institution will require super admin approval before operating.
             </p>
@@ -200,66 +197,80 @@ function InstitutionSignupModal({ isOpen, onClose }: InstitutionSignupModalProps
           </button>
         </div>
 
-        {/* FORM */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium mb-2">Institution ID</label>
+        {!publicKey ? (
+          <div className="p-8 flex flex-col items-center text-center space-y-5">
+            <div className="h-14 w-14 bg-violet-50 dark:bg-violet-950/50 rounded-2xl flex items-center justify-center text-violet-600">
+              <Wallet className="h-7 w-7" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">Wallet Connection Required</h3>
+              <p className="text-sm text-slate-500 mt-1 max-w-xs mx-auto">
+                Please connect your Solana wallet to register a new institution on-chain.
+              </p>
+            </div>
 
-            <input
-              type="number"
-              required
-              value={institutionId}
-              onChange={(e) => setInstitutionId(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 outline-none"
-            />
+            <div className="pt-2">
+              <WalletButton />
+            </div>
           </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            {/* <div>
+              <label className="block text-sm font-medium mb-2">Institution ID</label>
+              <input
+                type="number"
+                required
+                value={institutionId}
+                onChange={(e) => setInstitutionId(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 outline-none"
+              />
+            </div> */}
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Institution Name</label>
+            <div>
+              <label className="block text-sm font-medium mb-2">Institution Name</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 outline-none"
+              />
+            </div>
 
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 outline-none"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Description</label>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Treasury Wallet</label>
+              <textarea
+                required
+                value={policy}
+                onChange={(e) => setpolicy(e.target.value)}
+                rows={5}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 outline-none font-mono text-sm resize-none"
+              />
+            </div>
+            {error && (
+              <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 px-4 py-3 rounded-2xl">{error}</div>
+            )}
 
-            <input
-              type="text"
-              required
-              value={treasury}
-              onChange={(e) => setTreasury(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 outline-none font-mono text-sm"
-            />
-          </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-800"
+              >
+                Cancel
+              </button>
 
-          {error && (
-            <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 px-4 py-3 rounded-2xl">{error}</div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-800"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="px-5 py-3 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white transition-colors"
-            >
-              {mutation.isPending ? 'Creating...' : 'Submit Registration'}
-            </button>
-          </div>
-        </form>
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="px-5 py-3 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white transition-colors"
+              >
+                {mutation.isPending ? 'Creating...' : 'Submit Registration'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )

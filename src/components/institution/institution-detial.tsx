@@ -74,7 +74,7 @@ export default function InstitutionDetailPage() {
     publicKey?.toString() === institution.admin
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
+    <div className="mx-auto px-6 py-10 space-y-8">
 
       {/* HEADER */}
       <div className="border border-slate-200 dark:border-slate-800 rounded-3xl p-8 bg-white dark:bg-slate-900">
@@ -224,11 +224,11 @@ export default function InstitutionDetailPage() {
 
             <div>
               <p className="text-sm text-slate-500 mb-1">
-                Treasury Wallet
+                Description
               </p>
 
               <p className="font-mono text-sm break-all">
-                {institution.treasury}
+                {institution.policy}
               </p>
             </div>
 

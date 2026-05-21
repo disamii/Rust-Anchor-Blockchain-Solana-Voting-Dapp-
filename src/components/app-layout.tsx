@@ -19,7 +19,9 @@ export function AppLayout({
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <div className="flex flex-col min-h-screen">
         <AppHeader links={links} />
-<main className="flex-grow container mx-auto p-4 pt-20">          <ClusterChecker>
+        <main className="flex-grow container mx-auto p-4 pt-20">
+          {' '}
+          <ClusterChecker>
             <AccountChecker />
           </ClusterChecker>
           {children}
