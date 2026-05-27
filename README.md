@@ -100,7 +100,10 @@ NEXT_PUBLIC_PROGRAM_ID=YourProgramPublicKeyHere
 ### Run frontend
 
 ```bash
-npm run dev
+yarn dev
+''configure the first super admin
+
+yarn ts-node anchor/scripts/init-config.ts
 ```
 
 App runs at **[http://localhost:3000](http://localhost:3000)** 🎉
